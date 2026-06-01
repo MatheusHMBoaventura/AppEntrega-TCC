@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+      const errBox = document.createElement('div');
+      errBox.style = 'position:fixed; top:0; left:0; width:100%; background:rgba(255,0,0,0.95); color:white; padding:15px; z-index:99999; font-family:monospace; font-size:11px; line-height:1.4; border-bottom:3px solid #ff3333; max-height:250px; overflow:auto; box-sizing:border-box;';
+      errBox.innerHTML = `<strong>🔴 CRASH DETECTADO:</strong><br>${msg}<br><br><strong>Arquivo:</strong> ${url}<br><strong>Linha:</strong> ${line} | <strong>Coluna:</strong> ${col}`;
+      if (document.body) {
+        document.body.appendChild(errBox);
+      } else {
+        window.addEventListener('DOMContentLoaded', () => document.body.appendChild(errBox));
+      }
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(event) {
+      const errBox = document.createElement('div');
+      errBox.style = 'position:fixed; top:0; left:0; width:100%; background:rgba(255,100,0,0.95); color:white; padding:15px; z-index:99999; font-family:monospace; font-size:11px; line-height:1.4; border-bottom:3px solid #ffaa00; max-height:250px; overflow:auto; box-sizing:border-box;';
+      errBox.innerHTML = `<strong>⚠️ PROMESSA REJEITADA (ASSÍNCRONA):</strong><br>${event.reason}`;
+      if (document.body) {
+        document.body.appendChild(errBox);
+      } else {
+        window.addEventListener('DOMContentLoaded', () => document.body.appendChild(errBox));
+      }
+    });
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AppEntrega - Premium Ride-Sharing</title>
+  
+  <!-- Google Fonts: Inter para texto, Outfit para cabeçalhos e logo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div id="app-container" class="logged-out">
+    
+    <!-- ================= TELA DE LOGIN & CADASTRO (AUTH SCREEN) ================= -->
+    <div id="auth-screen">
+      <div class="auth-fluid-bg">
+        <div class="bubble bubble-1"></div>
+        <div class="bubble bubble-2"></div>
+      </div>
+      <div class="auth-card">
+        
+        <!-- Estado 1: Login -->
+        <div class="auth-box" id="auth-login-box">
+          <div class="auth-header">
+            <div class="logo-wrapper">
+              <i class="fa-solid fa-feather-pointed logo-icon"></i>
+              <span class="logo-text">Logo</span>
+            </div>
+            <h2>Bem-vindo de volta!</h2>
+            <p>Conecte-se para solicitar sua viagem</p>
+          </div>
+          
+          <form id="form-login" class="form-premium" novalidate>
+            <div class="form-group">
+              <label for="login-email">E-mail</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-regular fa-envelope field-icon"></i>
+                <input type="email" id="login-email" placeholder="exemplo@email.com" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="login-password">Senha</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-lock field-icon"></i>
+                <input type="password" id="login-password" placeholder="••••••••" required>
+                <button type="button" class="btn-toggle-password" tabindex="-1">
+                  <i class="fa-regular fa-eye-slash"></i>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary" id="btn-submit-login">Entrar</button>
+          </form>
+          
+          <div class="auth-footer">
+            <span>Não tem uma conta? <button type="button" class="btn-link" id="btn-go-signup">Cadastre-se</button></span>
+          </div>
+        </div>
+
+        <!-- Estado 2: Cadastro -->
+        <div class="auth-box hidden" id="auth-signup-box">
+          <div class="auth-header">
+            <div class="logo-wrapper">
+              <i class="fa-solid fa-feather-pointed logo-icon"></i>
+              <span class="logo-text">Logo</span>
+            </div>
+            <h2>Criar Conta</h2>
+            <p>Cadastre-se para começar a viajar</p>
+          </div>
+          
+          <form id="form-signup" class="form-premium" novalidate>
+            <div class="form-group">
+              <label for="signup-name">Nome Completo</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-regular fa-user field-icon"></i>
+                <input type="text" id="signup-name" placeholder="Digite seu nome" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-email">E-mail</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-regular fa-envelope field-icon"></i>
+                <input type="email" id="signup-email" placeholder="seuemail@provedor.com" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-phone">Telefone</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-phone field-icon"></i>
+                <input type="tel" id="signup-phone" placeholder="(11) 98765-4321" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-password">Senha</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-lock field-icon"></i>
+                <input type="password" id="signup-password" placeholder="••••••••" required>
+                <button type="button" class="btn-toggle-password" tabindex="-1">
+                  <i class="fa-regular fa-eye-slash"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-confirm-password">Confirmar Senha</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-shield-halved field-icon"></i>
+                <input type="password" id="signup-confirm-password" placeholder="••••••••" required>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary" id="btn-submit-signup">Criar Conta</button>
+          </form>
+          
+          <div class="auth-footer">
+            <span>Já tem uma conta? <button type="button" class="btn-link" id="btn-go-login">Entre</button></span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Cabeçalho Principal (Fixo em todas as telas) -->
+    <header class="main-header">
+      <div class="header-logo">
+        <!-- Ícone estilizado + Nome Logo idêntico ao design -->
+        <div class="logo-wrapper">
+          <i class="fa-solid fa-feather-pointed logo-icon"></i>
+          <span class="logo-text">Logo</span>
+        </div>
+      </div>
+      <button id="btn-profile-trigger" class="profile-avatar-btn" aria-label="Abrir Perfil">
+        <i class="fa-regular fa-user"></i>
+      </button>
+    </header>
+
+    <!-- Barra de Abas Superior -->
+    <nav class="navigation-tabs">
+      <button class="tab-btn active" data-tab="corridas" id="tab-corridas">
+        <i class="fa-solid fa-car-side"></i>
+        <span>Corridas</span>
+      </button>
+      <button class="tab-btn" data-tab="historico" id="tab-historico">
+        <i class="fa-regular fa-clock"></i>
+        <span>Histórico</span>
+      </button>
+      <button class="tab-btn" data-tab="ajuda" id="tab-ajuda">
+        <i class="fa-regular fa-circle-question"></i>
+        <span>Ajuda</span>
+      </button>
+      <!-- Indicador deslizante ativo -->
+      <div class="tab-indicator"></div>
+    </nav>
+
+    <!-- Conteúdo Principal Dinâmico -->
+    <main class="main-content">
+      
+      <!-- ================= TELA DE CORRIDAS (MAPA) ================= -->
+      <section id="view-corridas" class="view-panel active">
+        <!-- Barra de Busca Flutuante -->
+        <div class="search-container">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <input type="text" id="input-destination" placeholder="Para onde?" autocomplete="off">
+            <button id="btn-clear-search" class="clear-search-btn hidden">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <!-- Dropdown de Autocomplete -->
+          <div id="search-suggestions" class="search-suggestions hidden">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+        </div>
+
+        <!-- Conteiner do Mapa -->
+        <div id="map"></div>
+
+        <!-- Botões Flutuantes (FABs) -->
+        <button id="fab-payment" class="fab fab-left" aria-label="Métodos de Pagamento">
+          <i class="fa-solid fa-dollar-sign"></i>
+        </button>
+        <button id="fab-quick" class="fab fab-right" aria-label="Nova Viagem Rápida">
+          <i class="fa-solid fa-plus"></i>
+          <span class="fab-badge">?</span>
+        </button>
+
+        <!-- Bottom Sheet: Seleção de Categorias de Carro -->
+        <div id="ride-options-sheet" class="bottom-sheet hidden">
+          <div class="sheet-drag-handle"></div>
+          <div class="sheet-header">
+            <h3>Escolha uma viagem</h3>
+            <button class="btn-close-sheet" id="btn-close-ride-sheet"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="ride-route-summary">
+            <div class="route-line-decor">
+              <div class="dot green"></div>
+              <div class="line"></div>
+              <div class="dot red"></div>
+            </div>
+            <div class="route-addresses">
+              <div class="address-item">
+                <span class="label">Partida</span>
+                <span class="val" id="route-start-text">Sua Localização</span>
+              </div>
+              <div class="address-item">
+                <span class="label">Destino</span>
+                <span class="val" id="route-end-text">Destino Selecionado</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Lista de Categorias de Veículos -->
+          <div class="ride-categories-list">
+            <div class="category-card active" data-category="standard">
+              <div class="cat-left">
+                <div class="cat-icon-container bg-std">
+                  <i class="fa-solid fa-car"></i>
+                </div>
+                <div class="cat-info">
+                  <div class="cat-title">Carro Comum <span class="badge-eco">Econômico</span></div>
+                  <div class="cat-subtext">Viagens rápidas e baratas no dia a dia</div>
+                  <div class="cat-eta"><i class="fa-regular fa-clock"></i> Chegada em 3 min</div>
+                </div>
+              </div>
+              <div class="cat-right">
+                <div class="cat-price" id="price-standard">R$ 14,50</div>
+              </div>
+            </div>
+
+            <div class="category-card" data-category="comfort">
+              <div class="cat-left">
+                <div class="cat-icon-container bg-comf">
+                  <i class="fa-solid fa-car-side"></i>
+                </div>
+                <div class="cat-info">
+                  <div class="cat-title">Carro Comfort</div>
+                  <div class="cat-subtext">Mais espaçoso, carros novos com ar</div>
+                  <div class="cat-eta"><i class="fa-regular fa-clock"></i> Chegada em 2 min</div>
+                </div>
+              </div>
+              <div class="cat-right">
+                <div class="cat-price" id="price-comfort">R$ 19,80</div>
+              </div>
+            </div>
+
+            <div class="category-card" data-category="premium">
+              <div class="cat-left">
+                <div class="cat-icon-container bg-prem">
+                  <i class="fa-solid fa-taxi"></i>
+                </div>
+                <div class="cat-info">
+                  <div class="cat-title">Carro Black <span class="badge-vip">Premium</span></div>
+                  <div class="cat-subtext">Veículos de luxo, atendimento VIP</div>
+                  <div class="cat-eta"><i class="fa-regular fa-clock"></i> Chegada em 4 min</div>
+                </div>
+              </div>
+              <div class="cat-right">
+                <div class="cat-price" id="price-premium">R$ 28,90</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seletor de Pagamento -->
+          <div class="payment-selector" id="btn-sheet-payment-select">
+            <div class="payment-info-left">
+              <i class="fa-regular fa-credit-card"></i>
+              <span id="sheet-selected-payment">Cartão Cadastrado (**** 4242)</span>
+            </div>
+            <i class="fa-solid fa-chevron-right chevron"></i>
+          </div>
+
+          <!-- Ação Principal -->
+          <button id="btn-confirm-ride" class="btn-primary">Confirmar Viagem</button>
+        </div>
+
+        <!-- Bottom Sheet: Simulação de Corrida Ativa -->
+        <div id="trip-status-sheet" class="bottom-sheet hidden">
+          <div class="sheet-drag-handle"></div>
+          <div class="sheet-header">
+            <h3 id="trip-status-title">Aguardando motorista...</h3>
+          </div>
+          
+          <!-- Detalhes do Motorista -->
+          <div class="driver-profile-card">
+            <div class="driver-photo-container">
+              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" alt="Foto do Motorista" id="driver-avatar" class="driver-avatar">
+              <div class="driver-rating"><i class="fa-solid fa-star"></i> <span id="driver-rating-val">4.9</span></div>
+            </div>
+            <div class="driver-details">
+              <div class="driver-name" id="driver-name">Bruno Ramos</div>
+              <div class="driver-car" id="driver-car-info">Toyota Corolla Cinza</div>
+              <div class="driver-plate" id="driver-plate">BRA3G22</div>
+            </div>
+            <div class="driver-actions">
+              <a href="tel:0800" class="btn-circle-action"><i class="fa-solid fa-phone"></i></a>
+              <button class="btn-circle-action" id="btn-chat-driver"><i class="fa-solid fa-message"></i></button>
+            </div>
+          </div>
+
+          <!-- Progresso de Viagem -->
+          <div class="trip-progress-container">
+            <div class="progress-bar-wrapper">
+              <div id="trip-progress-bar" class="progress-bar-fill"></div>
+            </div>
+            <div class="progress-labels">
+              <span id="trip-eta-status">Chegada estimada: 15 min</span>
+              <span id="trip-distance-status">3.2 km restantes</span>
+            </div>
+          </div>
+
+          <!-- Ação de Cancelamento -->
+          <button id="btn-cancel-trip" class="btn-secondary danger">Cancelar Corrida</button>
+        </div>
+      </section>
+
+      <!-- ================= TELA DE HISTÓRICO ================= -->
+      <section id="view-historico" class="view-panel">
+        <div class="history-content">
+          <h2>Corridas Recentes</h2>
+          <div class="history-list" id="history-list">
+            <!-- Preenchido dinamicamente via JS. Mocks iniciais do design: -->
+            <div class="history-item-card">
+              <div class="hist-icon-container">
+                <i class="fa-solid fa-location-dot"></i>
+              </div>
+              <div class="hist-details">
+                <div class="hist-address">123 Main Street</div>
+                <div class="hist-date">Mar 28, 2026</div>
+              </div>
+              <div class="hist-price">$24.50</div>
+            </div>
+
+            <div class="history-item-card">
+              <div class="hist-icon-container">
+                <i class="fa-solid fa-location-dot"></i>
+              </div>
+              <div class="hist-details">
+                <div class="hist-address">Downtown Mall</div>
+                <div class="hist-date">Mar 25, 2026</div>
+              </div>
+              <div class="hist-price">$18.00</div>
+            </div>
+
+            <div class="history-item-card">
+              <div class="hist-icon-container">
+                <i class="fa-solid fa-location-dot"></i>
+              </div>
+              <div class="hist-details">
+                <div class="hist-address">Airport Terminal 2</div>
+                <div class="hist-date">Mar 20, 2026</div>
+              </div>
+              <div class="hist-price">$45.30</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TELA DE AJUDA ================= -->
+      <section id="view-ajuda" class="view-panel">
+        <div class="help-content">
+          <h2>Como podemos ajudar?</h2>
+          
+          <div class="help-accordion-list">
+            <!-- Tópico 1: Problemas com o app -->
+            <div class="accordion-item" data-topic="app">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-purple">
+                    <i class="fa-solid fa-bug"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Problemas com o app</span>
+                    <span class="help-subtext">Relatar erros ou bugs</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Se você está enfrentando problemas técnicos, travamentos ou lentidão no aplicativo, siga os passos abaixo:</p>
+                <ul>
+                  <li>Verifique se há atualizações disponíveis na Google Play Store.</li>
+                  <li>Limpe o cache do aplicativo nas configurações do seu celular.</li>
+                  <li>Verifique sua conexão com a internet (Wi-Fi ou 4G/5G).</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Problemas com o app">
+                  <i class="fa-solid fa-comments"></i> Conversar com Suporte Técnico
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 2: Pagamento -->
+            <div class="accordion-item" data-topic="payment">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-blue">
+                    <i class="fa-solid fa-credit-card"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Pagamento</span>
+                    <span class="help-subtext">Dúvidas sobre cobranças</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Precisa de ajuda com uma cobrança? Entenda como funcionam nossas tarifas:</p>
+                <ul>
+                  <li><strong>Tarifa Dinâmica:</strong> Em horários de alta demanda, os preços podem subir temporariamente.</li>
+                  <li><strong>Pedágios:</strong> Custos de pedágios na rota são adicionados automaticamente ao valor final.</li>
+                  <li><strong>Pré-autorização:</strong> Um bloqueio temporário pode ser feito em seu cartão ao solicitar a corrida.</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Dúvidas sobre Pagamentos">
+                  <i class="fa-solid fa-comments"></i> Conversar com Suporte de Cobrança
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 3: Viagens -->
+            <div class="accordion-item" data-topic="trips">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-red">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Viagens</span>
+                    <span class="help-subtext">Perguntas sobre corridas</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Encontre respostas para dúvidas comuns sobre o trajeto e comportamento das corridas:</p>
+                <ul>
+                  <li><strong>Esqueci um objeto:</strong> Entre em contato conosco imediatamente para localizarmos o motorista.</li>
+                  <li><strong>Alterar destino:</strong> Você pode alterar a rota direto no app durante a corrida.</li>
+                  <li><strong>Taxa de cancelamento:</strong> Cobrada caso cancele após 5 minutos do motorista aceitar.</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Ajuda com Viagens">
+                  <i class="fa-solid fa-comments"></i> Suporte de Viagens
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 4: Segurança -->
+            <div class="accordion-item" data-topic="safety">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-gold">
+                    <i class="fa-solid fa-shield-halved"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Segurança</span>
+                    <span class="help-subtext">Central de segurança</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Sua segurança é a nossa prioridade máxima. Nossos recursos incluem:</p>
+                <ul>
+                  <li><strong>Compartilhar Viagem:</strong> Permita que amigos e familiares acompanhem seu trajeto em tempo real.</li>
+                  <li><strong>Botão de Pânico (190):</strong> Ligação direta para a polícia em caso de emergência extrema.</li>
+                  <li><strong>Checagem de Antecedentes:</strong> Todos os motoristas passam por verificação rigorosa de histórico.</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Central de Segurança">
+                  <i class="fa-solid fa-shield-halved"></i> Contatar Time de Segurança
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 5: Contato -->
+            <div class="accordion-item" data-topic="contact">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-pink">
+                    <i class="fa-solid fa-phone"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Contato</span>
+                    <span class="help-subtext">Fale com o suporte</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Nossa central de atendimento ao cliente funciona 24 horas por dia, 7 dias por semana.</p>
+                <div class="contact-buttons-grid">
+                  <button class="btn-support-chat-trigger btn-primary btn-chat-general" data-subject="Atendimento Geral">
+                    <i class="fa-solid fa-comments"></i> Iniciar Chat de Suporte
+                  </button>
+                  <a href="tel:0800123456" class="btn-secondary btn-call-support">
+                    <i class="fa-solid fa-phone"></i> Ligar: 0800 123 456
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ================= DRAWER LATERAL DE PERFIL ================= -->
+    <div id="profile-drawer" class="drawer">
+      <div class="drawer-overlay" id="profile-drawer-overlay"></div>
+      <div class="drawer-content">
+        <div class="drawer-header">
+          <button class="btn-close-drawer" id="btn-close-profile"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <!-- Info do Usuário -->
+        <div class="drawer-user-info">
+          <div class="user-avatar-large">
+            <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150" alt="Avatar do Usuário" id="user-avatar-img">
+            <div class="user-avatar-placeholder hidden"><i class="fa-regular fa-user"></i></div>
+          </div>
+          <h2 id="user-display-name">João Silva</h2>
+          <span id="user-display-email">joao@email.com</span>
+        </div>
+
+        <!-- Links do Menu do Perfil (Design Idêntico) -->
+        <ul class="drawer-menu-list">
+          <li>
+            <button class="menu-item-btn" id="menu-btn-edit-profile">
+              <span class="menu-label">Editar Perfil</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-payments">
+              <span class="menu-label">Métodos de Pagamento</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-saved-places">
+              <span class="menu-label">Lugares Salvos</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-settings">
+              <span class="menu-label">Configurações</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-privacy">
+              <span class="menu-label">Privacidade</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li class="menu-item-logout-container">
+            <button class="menu-item-btn logout" id="menu-btn-logout">
+              <span class="menu-label">Sair</span>
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: EDITAR PERFIL ================= -->
+    <div class="modal hidden" id="modal-edit-profile">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Editar Perfil</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <form id="form-edit-profile" class="form-premium">
+            <div class="form-avatar-picker">
+              <div class="avatar-preview">
+                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150" alt="Avatar" id="edit-avatar-preview">
+              </div>
+              <div class="picker-options">
+                <button type="button" class="btn-secondary btn-small" id="btn-change-avatar-random">Trocar Foto</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="input-profile-name">Nome Completo</label>
+              <input type="text" id="input-profile-name" value="João Silva" required placeholder="Digite seu nome">
+            </div>
+            <div class="form-group">
+              <label for="input-profile-email">E-mail</label>
+              <input type="email" id="input-profile-email" value="joao@email.com" required placeholder="Digite seu e-mail">
+            </div>
+            <div class="form-group">
+              <label for="input-profile-phone">Telefone</label>
+              <input type="tel" id="input-profile-phone" value="(11) 98765-4321" placeholder="Digite seu telefone">
+            </div>
+            <button type="submit" class="btn-primary">Salvar Alterações</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: MÉTODOS DE PAGAMENTO ================= -->
+    <div class="modal hidden" id="modal-payments">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Métodos de Pagamento</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="payments-container">
+            <h4>Seus Cartões Salvos</h4>
+            <div class="cards-list" id="payment-cards-list">
+              <!-- Renderizado dinamicamente pelo JS -->
+            </div>
+
+            <!-- Adicionar Novo Cartão Form com Efeito Visual -->
+            <div class="add-card-section">
+              <button class="btn-secondary" id="btn-toggle-add-card">
+                <i class="fa-solid fa-plus"></i> Adicionar Novo Cartão
+              </button>
+              
+              <div id="add-card-form-wrapper" class="hidden-form hidden">
+                <!-- Visualização 3D do Cartão -->
+                <div class="credit-card-preview-container">
+                  <div class="credit-card-preview card-bg-visa" id="preview-card-bg">
+                    <div class="card-glow"></div>
+                    <div class="card-header-preview">
+                      <div class="card-chip"></div>
+                      <div class="card-brand-logo" id="preview-card-brand">
+                        <i class="fa-brands fa-cc-visa"></i>
+                      </div>
+                    </div>
+                    <div class="card-number-preview" id="preview-card-number">•••• •••• •••• ••••</div>
+                    <div class="card-footer-preview">
+                      <div class="card-holder-wrapper">
+                        <span class="card-label">TITULAR</span>
+                        <div class="card-holder-preview-val" id="preview-card-holder">NOME COMPLETO</div>
+                      </div>
+                      <div class="card-expiry-wrapper">
+                        <span class="card-label">VALIDADE</span>
+                        <div class="card-expiry-preview-val" id="preview-card-expiry">MM/AA</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <form id="form-add-card" class="form-premium">
+                  <div class="form-group">
+                    <label for="input-card-number">Número do Cartão</label>
+                    <input type="text" id="input-card-number" placeholder="4000 1234 5678 9010" maxlength="19" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="input-card-holder">Nome Impresso no Cartão</label>
+                    <input type="text" id="input-card-holder" placeholder="JOAO SILVA" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group col-6">
+                      <label for="input-card-expiry">Validade</label>
+                      <input type="text" id="input-card-expiry" placeholder="12/30" maxlength="5" required>
+                    </div>
+                    <div class="form-group col-6">
+                      <label for="input-card-cvv">CVV</label>
+                      <input type="password" id="input-card-cvv" placeholder="•••" maxlength="4" required>
+                    </div>
+                  </div>
+                  <button type="submit" class="btn-primary">Cadastrar Cartão</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: LUGARES SALVOS ================= -->
+    <div class="modal hidden" id="modal-saved-places">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Lugares Salvos</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="saved-places-list" id="saved-places-list">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+          <button class="btn-primary" id="btn-add-saved-place" style="margin-top: 15px;">
+            <i class="fa-solid fa-plus"></i> Adicionar Endereço Favorito
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: CONFIGURAÇÕES ================= -->
+    <div class="modal hidden" id="modal-settings">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Configurações</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <ul class="settings-options-list">
+            <li class="settings-item">
+              <div class="settings-info">
+                <span class="settings-title">Modo Escuro</span>
+                <span class="settings-desc">Ativar tema escuro no aplicativo</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-dark-mode">
+                <span class="slider"></span>
+              </label>
+            </li>
+            <li class="settings-item">
+              <div class="settings-info">
+                <span class="settings-title">Notificações Push</span>
+                <span class="settings-desc">Atualizações sobre motoristas e descontos</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-push-notif" checked>
+                <span class="slider"></span>
+              </label>
+            </li>
+            <li class="settings-item">
+              <div class="settings-info">
+                <span class="settings-title">Sons no Aplicativo</span>
+                <span class="settings-desc">Alertas sonoros de chegada e mensagens</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-sounds" checked>
+                <span class="slider"></span>
+              </label>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: PRIVACIDADE ================= -->
+    <div class="modal hidden" id="modal-privacy">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Privacidade</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body privacy-body">
+          <div class="privacy-rich-text">
+            <h4>Proteção de Dados e Termos de Uso</h4>
+            <p>Seus dados são protegidos sob a Lei Geral de Proteção de Dados (LGPD). Nós coletamos apenas as informações estritamente necessárias para a prestação do serviço de transporte:</p>
+            <ul>
+              <li><strong>Localização em tempo real:</strong> Utilizada para conectar você com os motoristas mais próximos e traçar a rota com precisão.</li>
+              <li><strong>Dados de perfil:</strong> Nome, email e telefone são compartilhados de forma restrita com o motorista aceito apenas durante a viagem ativa.</li>
+              <li><strong>Dados financeiros:</strong> Informações de cartão de crédito são criptografadas e salvas diretamente em parceiros de pagamento certificados (PCI-DSS), nunca armazenados cruamente em nossos servidores.</li>
+            </ul>
+            <p>Para dúvidas ou exclusão de conta, entre em contato diretamente com o nosso DPO pelo chat de ajuda.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= CHAT DE SUPORTE EM TEMPO REAL ================= -->
+    <div class="modal hidden" id="modal-support-chat">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper chat-wrapper">
+        <div class="modal-header chat-header">
+          <div class="chat-title-container">
+            <div class="chat-agent-avatar"><i class="fa-solid fa-headset"></i></div>
+            <div class="chat-agent-info">
+              <span class="agent-name" id="chat-subject-title">Suporte Técnico</span>
+              <span class="agent-status"><span class="dot-online"></span> Atendente Online</span>
+            </div>
+          </div>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body chat-body" id="chat-messages-container">
+          <!-- Mensagens renderizadas dinamicamente via JS -->
+          <div class="chat-bubble received">
+            Olá, João! Sou o assistente virtual da AppEntrega. Como posso te ajudar com o tema <strong id="chat-bold-subject">Problemas com o app</strong> hoje?
+            <span class="bubble-time">Agora mesmo</span>
+          </div>
+        </div>
+        <div class="chat-footer">
+          <input type="text" id="input-chat-message" placeholder="Digite uma mensagem..." autocomplete="off">
+          <button id="btn-send-chat-msg" class="btn-send-msg" aria-label="Enviar mensagem">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notificações Flutuantes (Toast) -->
+    <div id="toast-container"></div>
+    
+  </div>
+
+  <!-- Leaflet Map Library Javascript -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Supabase Cloud JS Library CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Supabase Cloud Configuration -->
+  <script src="supabase-config.js"></script>
+
+  <!-- Database Unified Layer -->
+  <script src="db.js"></script>
+  
+  <!-- Application Main Logic -->
+  <script src="index.js"></script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+[
+  {
+    "timestamp": "2026-06-01T12:44:14.966Z",
+    "level": "WARN",
+    "category": "SECURITY",
+    "action": "auth.login.failed",
+    "user_id": "e3b0c442-98fc-11ee-b9d1-0242ac120002",
+    "user_email": "joao@email.com",
+    "payload": {
+      "email": "joao@email.com",
+      "device": "Android 13 (Samsung S23)",
+      "app_version": "1.0.0",
+      "success": false
+    },
+    "session_id": "sess_pxg9ogn5fk"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.966Z",
+    "level": "INFO",
+    "category": "USER_SETTINGS",
+    "action": "place.saved",
+    "user_id": "e3b0c442-98fc-11ee-b9d1-0242ac120002",
+    "user_email": "joao@email.com",
+    "payload": {
+      "place_type": "work",
+      "place_title": "Trabalho",
+      "place_address": "Shopping Eldorado - Pinheiros, São Paulo - SP"
+    },
+    "session_id": "sess_ezmjrq1v2y"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.966Z",
+    "level": "INFO",
+    "category": "BILLING",
+    "action": "payment.card.added",
+    "user_id": "e3b0c442-98fc-11ee-b9d1-0242ac120002",
+    "user_email": "joao@email.com",
+    "payload": {
+      "card_brand": "visa",
+      "card_number_masked": "•••• •••• •••• 4242",
+      "card_holder": "JOÃO SILVA"
+    },
+    "session_id": "sess_0ps6ljd1cwj"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.967Z",
+    "level": "WARN",
+    "category": "SECURITY",
+    "action": "auth.login.failed",
+    "user_id": "f4b1d553-99fd-11ee-b9d1-0242ac120003",
+    "user_email": "matheus@email.com",
+    "payload": {
+      "email": "matheus@email.com",
+      "device": "Android 13 (Samsung S23)",
+      "app_version": "1.0.0",
+      "success": false
+    },
+    "session_id": "sess_t84sm7z7fq"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.967Z",
+    "level": "INFO",
+    "category": "BILLING",
+    "action": "payment.card.added",
+    "user_id": "e3b0c442-98fc-11ee-b9d1-0242ac120002",
+    "user_email": "joao@email.com",
+    "payload": {
+      "card_brand": "visa",
+      "card_number_masked": "•••• •••• •••• 4242",
+      "card_holder": "JOÃO SILVA"
+    },
+    "session_id": "sess_59uw3h8hz82"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.967Z",
+    "level": "WARN",
+    "category": "SECURITY",
+    "action": "auth.login.failed",
+    "user_id": "f4b1d553-99fd-11ee-b9d1-0242ac120003",
+    "user_email": "matheus@email.com",
+    "payload": {
+      "email": "matheus@email.com",
+      "device": "Android 14 (Motorola Edge)",
+      "app_version": "1.0.0",
+      "success": false
+    },
+    "session_id": "sess_vwxgt5vjcoe"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.967Z",
+    "level": "INFO",
+    "category": "SECURITY",
+    "action": "auth.login.success",
+    "user_id": "e3b0c442-98fc-11ee-b9d1-0242ac120002",
+    "user_email": "joao@email.com",
+    "payload": {
+      "email": "joao@email.com",
+      "device": "Android 13 (Samsung S23)",
+      "app_version": "1.0.0",
+      "success": true
+    },
+    "session_id": "sess_4b8sak74a33"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.967Z",
+    "level": "WARN",
+    "category": "SECURITY",
+    "action": "auth.login.failed",
+    "user_id": "f4b1d553-99fd-11ee-b9d1-0242ac120003",
+    "user_email": "matheus@email.com",
+    "payload": {
+      "email": "matheus@email.com",
+      "device": "Android 14 (Motorola Edge)",
+      "app_version": "1.0.0",
+      "success": false
+    },
+    "session_id": "sess_bc04hir11o6"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.967Z",
+    "level": "WARN",
+    "category": "SECURITY",
+    "action": "auth.login.failed",
+    "user_id": "f4b1d553-99fd-11ee-b9d1-0242ac120003",
+    "user_email": "matheus@email.com",
+    "payload": {
+      "email": "matheus@email.com",
+      "device": "Android 13 (Samsung S23)",
+      "app_version": "1.0.0",
+      "success": false
+    },
+    "session_id": "sess_7s5k2rtekok"
+  },
+  {
+    "timestamp": "2026-06-01T12:44:14.967Z",
+    "level": "WARN",
+    "category": "SECURITY",
+    "action": "auth.login.failed",
+    "user_id": "f4b1d553-99fd-11ee-b9d1-0242ac120003",
+    "user_email": "matheus@email.com",
+    "payload": {
+      "email": "matheus@email.com",
+      "device": "Android 14 (Motorola Edge)",
+      "app_version": "1.0.0",
+      "success": false
+    },
+    "session_id": "sess_rkczhs2j04e"
+  }
+]
