@@ -42,3 +42,7 @@ android/captmp/
 # Operating System Files
 *.tmp
 *.bak
+
+# Relatórios acadêmicos locais
+AVALIACAO_B2.md
+
