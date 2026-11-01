@@ -38,6 +38,7 @@ android/captmp/
 .env.development.local
 .env.test.local
 .env.production.local
+push_to_github.js
 www/supabase-config.js
 **/supabase-config.js
 android/app/src/main/assets/public/
