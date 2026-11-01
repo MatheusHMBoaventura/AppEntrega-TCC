@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+      const errBox = document.createElement('div');
+      errBox.style = 'position:fixed; top:0; left:0; width:100%; background:rgba(255,0,0,0.95); color:white; padding:15px; z-index:99999; font-family:monospace; font-size:11px; line-height:1.4; border-bottom:3px solid #ff3333; max-height:250px; overflow:auto; box-sizing:border-box;';
+      errBox.innerHTML = `<strong>🔴 CRASH DETECTADO:</strong><br>${msg}<br><br><strong>Arquivo:</strong> ${url}<br><strong>Linha:</strong> ${line} | <strong>Coluna:</strong> ${col}`;
+      if (document.body) {
+        document.body.appendChild(errBox);
+      } else {
+        window.addEventListener('DOMContentLoaded', () => document.body.appendChild(errBox));
+      }
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(event) {
+      const errBox = document.createElement('div');
+      errBox.style = 'position:fixed; top:0; left:0; width:100%; background:rgba(255,100,0,0.95); color:white; padding:15px; z-index:99999; font-family:monospace; font-size:11px; line-height:1.4; border-bottom:3px solid #ffaa00; max-height:250px; overflow:auto; box-sizing:border-box;';
+      errBox.innerHTML = `<strong>⚠️ PROMESSA REJEITADA (ASSÍNCRONA):</strong><br>${event.reason}`;
+      if (document.body) {
+        document.body.appendChild(errBox);
+      } else {
+        window.addEventListener('DOMContentLoaded', () => document.body.appendChild(errBox));
+      }
+    });
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AppEntrega - Premium Ride-Sharing</title>
+  
+  <!-- Google Fonts: Inter para texto, Outfit para cabeçalhos e logo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div id="app-container" class="logged-out">
+    
+    <!-- ================= TELA DE LOGIN & CADASTRO (AUTH SCREEN) ================= -->
+    <div id="auth-screen">
+      <div class="auth-fluid-bg">
+        <div class="bubble bubble-1"></div>
+        <div class="bubble bubble-2"></div>
+      </div>
+      <div class="auth-card">
+        
+        <!-- Estado 1: Login -->
+        <div class="auth-box" id="auth-login-box">
+          <div class="auth-header">
+            <div class="auth-brand">
+              <div class="auth-brand-emblem-large">
+                <div class="emblem-glow-ring"></div>
+                <div class="emblem-inner-box">
+                  <i class="fa-solid fa-bolt-lightning"></i>
+                </div>
+              </div>
+              <h1 class="brand-title">Rota<span class="brand-title-accent">Rápida</span></h1>
+              <span class="brand-name-sub">APP DE ENTREGAS & LOGÍSTICA</span>
+            </div>
+            <h2>Bem-vindo de volta!</h2>
+            <p>Conecte-se para acessar sua conta</p>
+          </div>
+
+          <div id="form-login" class="form-premium">
+            <div class="form-group">
+              <label for="login-email">E-mail</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-regular fa-envelope field-icon"></i>
+                <input type="email" id="login-email" placeholder="exemplo@email.com" autocomplete="email">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="login-password">
+                Senha
+                <button type="button" class="btn-link btn-forgot-password" id="btn-forgot-password" style="float:right; font-size:0.75rem; font-weight:500;">Esqueceu a senha?</button>
+              </label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-lock field-icon"></i>
+                <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+                <button type="button" class="btn-toggle-password" tabindex="-1">
+                  <i class="fa-regular fa-eye-slash"></i>
+                </button>
+              </div>
+            </div>
+            <div id="login-error-msg" class="auth-error-banner hidden" style="display: none;"></div>
+            <button type="button" class="btn-primary" id="btn-submit-login">Entrar</button>
+
+            <div class="auth-divider"><span>ou</span></div>
+
+            <button type="button" class="btn-google-login" id="btn-google-login">
+              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+              Continuar com Google
+            </button>
+          </div>
+
+          <div class="auth-footer">
+            <span>Não tem uma conta? <button type="button" class="btn-link" id="btn-go-signup">Cadastre-se</button></span>
+          </div>
+        </div>
+
+        <!-- Estado 2: Cadastro -->
+        <div class="auth-box hidden" id="auth-signup-box">
+          <button type="button" class="btn-auth-back" id="btn-back-to-login" aria-label="Voltar para Login">
+            <i class="fa-solid fa-arrow-left"></i> Voltar ao login
+          </button>
+          <div class="auth-header">
+            <div class="logo-wrapper" style="margin-bottom:4px;">
+              <div class="brand-emblem-badge" style="width:30px; height:30px; font-size:0.9rem;">
+                <i class="fa-solid fa-bolt-lightning"></i>
+              </div>
+              <div class="brand-name-group">
+                <span class="brand-name-main" style="font-size:1.05rem;">Rota<span class="brand-name-accent">Rápida</span></span>
+              </div>
+            </div>
+            <h2>Criar Conta</h2>
+            <p>Selecione seu perfil para se cadastrar</p>
+          </div>
+
+          <!-- Seletor de Tipo de Conta -->
+          <div class="user-type-selector">
+            <div class="user-type-card active" data-type="entregador" id="type-btn-entregador">
+              <i class="fa-solid fa-motorcycle type-icon"></i>
+              <div class="type-info">
+                <span class="type-title">Entregador</span>
+                <span class="type-subtitle">Moto / Fretes</span>
+              </div>
+            </div>
+            <div class="user-type-card" data-type="lojista" id="type-btn-lojista">
+              <i class="fa-solid fa-store type-icon"></i>
+              <div class="type-info">
+                <span class="type-title">Lojista</span>
+                <span class="type-subtitle">Estabelecimento</span>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="signup-user-type" value="entregador">
+          
+          <form id="form-signup" class="form-premium" novalidate>
+            <div class="form-group">
+              <label for="signup-name">Nome Completo do Responsável</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-regular fa-user field-icon"></i>
+                <input type="text" id="signup-name" placeholder="Digite seu nome" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-email">E-mail</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-regular fa-envelope field-icon"></i>
+                <input type="email" id="signup-email" placeholder="seuemail@provedor.com" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-phone">Telefone / WhatsApp</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-phone field-icon"></i>
+                <input type="tel" id="signup-phone" placeholder="(11) 98765-4321" required>
+              </div>
+            </div>
+
+            <!-- Campos Específicos do Entregador (Moto) -->
+            <div id="fields-entregador" class="role-fields">
+              <!-- Dados da moto e documentos serão preenchidos ao aceitar fretes -->
+            </div>
+
+            <!-- Campos Específicos do Lojista -->
+            <div id="fields-lojista" class="role-fields hidden">
+              <div class="form-group">
+                <label for="signup-cnpj">CNPJ do Estabelecimento <span class="label-required">*</span></label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-building field-icon"></i>
+                  <input type="text" id="signup-cnpj" placeholder="00.000.000/0000-00" maxlength="18" inputmode="numeric">
+                </div>
+                <button type="button" id="btn-search-cnpj" class="btn-secondary" style="width:100%; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:700;">
+                  <i class="fa-solid fa-magnifying-glass"></i> Buscar Dados da Empresa pelo CNPJ
+                </button>
+              </div>
+
+              <!-- Card com os dados da empresa preenchidos automaticamente após confirmação -->
+              <div id="confirmed-company-card" class="confirmed-company-card hidden" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.3); border-radius:10px; padding:12px; margin-bottom:14px;">
+                <div style="display:flex; align-items:center; gap:6px; color:#10b981; font-weight:700; font-size:0.75rem; text-transform:uppercase; margin-bottom:4px;">
+                  <i class="fa-solid fa-circle-check"></i> Empresa Verificada
+                </div>
+                <strong id="confirmed-company-name" style="font-size:0.9rem; color:var(--color-text-primary); display:block;"></strong>
+                <span id="confirmed-company-address" style="font-size:0.75rem; color:var(--color-text-muted); display:block; margin-top:3px; line-height:1.3;"></span>
+              </div>
+
+              <!-- Campos preenchidos automaticamente -->
+              <input type="hidden" id="signup-store-name">
+              <input type="hidden" id="signup-store-address">
+
+              <div class="form-group">
+                <label for="signup-category">Categoria do Negócio</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-utensils field-icon"></i>
+                  <select id="signup-category" class="custom-select">
+                    <option value="Restaurante">Restaurante / Lanchonete / Pizzaria</option>
+                    <option value="Mercado">Mercado / Mercearia</option>
+                    <option value="Farmácia">Farmácia</option>
+                    <option value="Borracharia / Auto Peças">Borracharia / Auto Peças</option>
+                    <option value="Bebidas">Distribuidora de Bebidas</option>
+                    <option value="Outros">Outros Estabelecimentos</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="signup-password">Senha</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-lock field-icon"></i>
+                <input type="password" id="signup-password" placeholder="••••••••" required>
+                <button type="button" class="btn-toggle-password" tabindex="-1">
+                  <i class="fa-regular fa-eye-slash"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-confirm-password">Confirmar Senha</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-solid fa-shield-halved field-icon"></i>
+                <input type="password" id="signup-confirm-password" placeholder="••••••••" required>
+              </div>
+            </div>
+            <div class="form-group lgpd-group">
+              <label class="checkbox-container lgpd-label">
+                <input type="checkbox" id="signup-lgpd" required>
+                <span class="custom-checkbox"></span>
+                <span class="lgpd-text">
+                  Li e concordo com os <strong>Termos de Uso</strong> e autorizo o tratamento dos meus dados cadastrais e de localização nos termos da <strong>Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018)</strong> para finalidade de prestação dos serviços de entrega.
+                </span>
+              </label>
+            </div>
+            <button type="submit" class="btn-primary" id="btn-submit-signup">Criar Conta</button>
+          </form>
+          
+          <div class="auth-footer">
+            <span>Já tem uma conta? <button type="button" class="btn-link" id="btn-go-login">Entre</button></span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================= MODAL (dentro do auth-screen): ESQUECEU A SENHA ================= -->
+      <div class="modal hidden" id="modal-forgot-password">
+        <div class="modal-overlay"></div>
+        <div class="modal-wrapper">
+          <div class="modal-header">
+            <h3><i class="fa-solid fa-key" style="color:var(--color-primary);"></i> Recuperar Senha</h3>
+            <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size:0.85rem; color:var(--color-text-secondary); margin-bottom:16px;">
+              Digite o e-mail cadastrado na sua conta. Nós localizaremos seu registro e forneceremos as instruções para redefinição.
+            </p>
+            <div class="form-group">
+              <label for="forgot-email">E-mail Cadastrado</label>
+              <div class="input-icon-wrapper">
+                <i class="fa-regular fa-envelope field-icon"></i>
+                <input type="email" id="forgot-email" placeholder="seuemail@exemplo.com">
+              </div>
+            </div>
+            <div id="forgot-feedback-msg" class="auth-error-banner hidden"></div>
+            <button type="button" class="btn-primary" id="btn-submit-forgot" style="width:100%; margin-top:12px;">
+              <i class="fa-solid fa-paper-plane"></i> Enviar Instruções de Redefinição
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= MODAL (dentro do auth-screen): LOGIN COM O GOOGLE ================= -->
+      <div class="modal hidden" id="modal-google-login">
+        <div class="modal-overlay"></div>
+        <div class="modal-wrapper google-login-modal">
+          <div class="modal-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+              <h3 style="margin:0;">Entrar com o Google</h3>
+            </div>
+            <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size:0.82rem; color:var(--color-text-secondary); margin-bottom:14px;">
+              Selecione uma conta para continuar no <strong>AppEntrega</strong>:
+            </p>
+            <div class="google-accounts-list">
+              <div class="google-account-item" id="google-acc-cardoso" style="border:1.5px solid #3b82f6; background:rgba(59,130,246,0.06);">
+                <img src="https://lh3.googleusercontent.com/a/ACg8ocIZ9xdj311FG9vY4njLY0e8Vu_Q5fvz301epxNTqHqqLaRJHMo=s96-c" class="google-acc-avatar" alt="Cardoso Vitor" onerror="this.src='https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'">
+                <div class="google-acc-info">
+                  <strong>Cardoso Vitor (Conta Google Real)</strong>
+                  <span>cardoso31082005@gmail.com</span>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color:#2563eb; font-size:0.8rem;"></i>
+              </div>
+              <div class="google-account-item" id="google-acc-joao">
+                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150" class="google-acc-avatar" alt="João">
+                <div class="google-acc-info">
+                  <strong>João Silva (Entregador Teste)</strong>
+                  <span>joao@email.com</span>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color:#94a3b8; font-size:0.8rem;"></i>
+              </div>
+              <div class="google-account-item" id="google-acc-matheus">
+                <img src="https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=150" class="google-acc-avatar" alt="Matheus">
+                <div class="google-acc-info">
+                  <strong>Matheus Lojista (Pizzaria)</strong>
+                  <span>matheus@email.com</span>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color:#94a3b8; font-size:0.8rem;"></i>
+              </div>
+              <div class="google-account-item" id="google-acc-custom">
+                <div class="google-acc-avatar" style="background:#e2e8f0; display:flex; align-items:center; justify-content:center; color:#64748b;">
+                  <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <div class="google-acc-info">
+                  <strong>Usar outra conta Google</strong>
+                  <span>Fazer login ou cadastrar nova conta</span>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color:#94a3b8; font-size:0.8rem;"></i>
+              </div>
+            </div>
+
+            <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--color-border, #e2e8f0); text-align:center;">
+              <button type="button" id="btn-paste-oauth-url" class="btn-secondary" style="width:100%; font-size:0.75rem; padding:8px 10px;">
+                <i class="fa-solid fa-clipboard"></i> Colar URL do Google (se o Chrome travar no localhost)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Popup de Confirmação dos Dados do CNPJ da Empresa -->
+      <div class="modal hidden" id="modal-cnpj-confirm" style="z-index:99999 !important;">
+        <div class="modal-overlay"></div>
+        <div class="modal-card" style="max-width:380px;">
+          <div class="modal-header">
+            <h3><i class="fa-solid fa-building-circle-check" style="color:#10b981;"></i> Dados da Empresa</h3>
+            <button type="button" class="btn-close-modal" id="btn-close-cnpj-modal"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="modal-body" style="padding:16px;">
+            <p style="font-size:0.78rem; color:var(--color-text-muted); margin-bottom:12px;">
+              Confira os dados da sua empresa obtidos na Receita Federal:
+            </p>
+
+            <div style="background:var(--color-bg-secondary, #f8fafc); border:1px solid var(--color-border, #e2e8f0); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+              <div>
+                <span style="font-size:0.68rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700;">Nome Fantasia / Razão Social</span>
+                <strong id="cnpj-popup-razao" style="display:block; font-size:0.88rem; color:var(--color-text-primary); margin-top:2px;"></strong>
+              </div>
+              <div>
+                <span style="font-size:0.68rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700;">CNPJ</span>
+                <span id="cnpj-popup-cnpj" style="display:block; font-size:0.8rem; font-weight:600; color:var(--color-text-primary);"></span>
+              </div>
+              <div>
+                <span style="font-size:0.68rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700;">Situação Cadastral</span>
+                <div>
+                  <span id="cnpj-popup-situacao" style="display:inline-block; font-size:0.72rem; font-weight:700; color:#10b981; background:rgba(16,185,129,0.12); padding:2px 8px; border-radius:4px; margin-top:2px;"></span>
+                </div>
+              </div>
+              <div>
+                <span style="font-size:0.68rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700;">Endereço Completo</span>
+                <span id="cnpj-popup-endereco" style="display:block; font-size:0.75rem; color:var(--color-text-primary); line-height:1.4; margin-top:2px;"></span>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-top:16px;">
+              <button type="button" class="btn-secondary" id="btn-cnpj-cancel" style="flex:1;">
+                Corrigir
+              </button>
+              <button type="button" class="btn-primary" id="btn-cnpj-confirm" style="flex:1.6; background:#10b981;">
+                <i class="fa-solid fa-check"></i> Confirmo
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Cabeçalho Principal (Fixo em todas as telas) -->
+    <header class="main-header">
+      <div class="header-logo">
+        <div class="logo-wrapper">
+          <div class="brand-emblem-badge">
+            <i class="fa-solid fa-bolt-lightning"></i>
+          </div>
+          <div class="brand-name-group">
+            <span class="brand-name-main">Rota<span class="brand-name-accent">Rápida</span></span>
+            <span class="brand-name-sub">EXPRESS</span>
+          </div>
+        </div>
+      </div>
+      <button id="btn-profile-trigger" class="profile-avatar-btn" aria-label="Abrir Perfil">
+        <i class="fa-regular fa-user"></i>
+      </button>
+    </header>
+
+    <!-- Barra de Abas Superior Adaptável ao Perfil -->
+    <nav class="navigation-tabs" id="main-nav-tabs">
+      <!-- Abas para Entregador -->
+      <button class="tab-btn active role-entregador" data-tab="corridas" id="tab-corridas">
+        <i class="fa-solid fa-map-location-dot"></i>
+        <span>Mapa</span>
+      </button>
+      <button class="tab-btn role-entregador" data-tab="fretes" id="tab-fretes">
+        <i class="fa-solid fa-boxes-stacked"></i>
+        <span>Oportunidades</span>
+      </button>
+      <button class="tab-btn role-entregador" data-tab="historico" id="tab-historico">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>Histórico</span>
+      </button>
+
+      <!-- Abas para Lojista -->
+      <button class="tab-btn role-lojista hidden" data-tab="pedidos-loja" id="tab-pedidos-loja">
+        <i class="fa-solid fa-store"></i>
+        <span>Meus Fretes</span>
+      </button>
+      <button class="tab-btn role-lojista hidden" data-tab="novo-pedido" id="tab-novo-pedido">
+        <i class="fa-solid fa-plus-circle"></i>
+        <span>Criar Frete</span>
+      </button>
+
+      <!-- Aba Compartilhada -->
+      <button class="tab-btn" data-tab="ajuda" id="tab-ajuda">
+        <i class="fa-regular fa-circle-question"></i>
+        <span>Ajuda</span>
+      </button>
+      <!-- Indicador deslizante ativo -->
+      <div class="tab-indicator"></div>
+    </nav>
+
+    <!-- Conteúdo Principal Dinâmico -->
+    <main class="main-content">
+      
+      <!-- ================= TELA DO MAPA (RASTREAMENTO DE ENTREGADOR) ================= -->
+      <section id="view-corridas" class="view-panel active">
+        <!-- Banner de Status do Rastreamento -->
+        <div class="map-status-banner" id="map-status-banner">
+          <i class="fa-solid fa-crosshairs"></i>
+          <span id="map-status-text">Rastreamento do entregador em tempo real</span>
+        </div>
+
+        <!-- Conteiner do Mapa -->
+        <div id="map"></div>
+
+        <!-- Botão Flutuante de Recentralizar -->
+        <button id="fab-recenter" class="fab fab-recenter" aria-label="Minha Localização">
+          <i class="fa-solid fa-location-crosshairs"></i>
+        </button>
+
+        <!-- Botão Flutuante de Roteirização de Entregas (Solver OSRM + OR-Tools) -->
+        <button id="fab-route-optimizer" class="fab fab-top-left fab-icon-only" aria-label="Roteirizar Entregas" title="Roteirizar Entregas">
+          <i class="fa-solid fa-route"></i>
+        </button>
+
+        <!-- Botão Flutuante SOS Emergência Borracharia/Oficina -->
+        <button id="fab-sos" class="fab fab-top-right fab-sos fab-icon-only" aria-label="SOS Emergência" title="SOS – Mecânico / Borracharia">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </button>
+
+        <!-- Botão Flutuante para Remover/Cancelar Rota Ativa do Mapa -->
+        <button id="btn-cancel-route" class="fab-cancel-route hidden" aria-label="Remover Rota" title="Remover Rota do Mapa">
+          <i class="fa-solid fa-xmark"></i>
+          <span>Remover Rota</span>
+        </button>
+
+        <!-- Card Flutuante de Entrega Ativa em Andamento -->
+        <div id="active-delivery-card" class="active-delivery-card hidden">
+          <div class="active-delivery-info">
+            <div class="active-stop-badge" id="active-stop-badge">1</div>
+            <div class="active-stop-text">
+              <span class="active-stop-title" id="active-stop-name">Próxima Parada</span>
+              <span class="active-stop-sub" id="active-stop-sub">A caminho do destino</span>
+            </div>
+          </div>
+          <div class="active-delivery-actions">
+            <button type="button" class="btn-complete-delivery" id="btn-complete-active-delivery" title="Concluir esta entrega">
+              <i class="fa-solid fa-circle-check"></i> Concluir
+            </button>
+          </div>
+        </div>
+
+        <!-- Botões Flutuantes Principais (FABs) -->
+        <button id="fab-payment" class="fab fab-left" aria-label="Carteira Virtual">
+          <i class="fa-solid fa-wallet"></i>
+        </button>
+        <button id="fab-quick" class="fab fab-right" aria-label="Escanear QR Code">
+          <i class="fa-solid fa-qrcode"></i>
+        </button>
+      </section>
+
+      <!-- ================= TELA DE OPORTUNIDADES / FRETES DISPONÍVEIS (ENTREGADOR) ================= -->
+      <section id="view-fretes" class="view-panel">
+        <div class="fretes-content">
+          <div class="section-page-header">
+            <h2><i class="fa-solid fa-boxes-stacked"></i> Oportunidades de Fretes</h2>
+            <p>Fretes disponíveis para você aceitar e adicionar à sua rota</p>
+          </div>
+          <div class="fretes-list" id="fretes-list">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TELA DE MEUS PEDIDOS (LOJISTA) ================= -->
+      <section id="view-pedidos-loja" class="view-panel">
+        <div class="store-orders-content">
+          <div class="section-page-header">
+            <h2><i class="fa-solid fa-store"></i> Meus Fretes & Pedidos</h2>
+            <p>Acompanhe os pedidos despachados e o status dos motoboys</p>
+          </div>
+          <div class="orders-list" id="store-orders-list">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TELA DE CRIAR FRETE (LOJISTA) ================= -->
+      <section id="view-novo-pedido" class="view-panel">
+        <div class="new-order-content">
+          <div class="new-order-card">
+            <div class="section-page-header">
+              <h2><i class="fa-solid fa-paper-plane"></i> Solicitar Motoboy / Criar Frete</h2>
+              <p>Publique a demanda de entrega para os motoboys da região</p>
+            </div>
+            
+            <form id="form-create-order" class="form-premium">
+              <div class="form-group">
+                <label for="order-store-name">Nome da Loja</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-shop field-icon"></i>
+                  <input type="text" id="order-store-name" required placeholder="Ex: Pizzaria do Matheus">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="order-pickup-address">Endereço de Retirada (Sua Loja)</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-location-dot field-icon"></i>
+                  <input type="text" id="order-pickup-address" required placeholder="Av. Paulista, 2000 - Bela Vista">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="order-delivery-address">Endereço de Entrega (Destino do Cliente)</label>
+                <div class="search-stop-inline">
+                  <div class="input-icon-wrapper" style="flex:1;">
+                    <i class="fa-solid fa-house-chimney field-icon"></i>
+                    <input type="text" id="order-delivery-address" required placeholder="Ex: Rua Augusta, 1200 - Consolação">
+                  </div>
+                  <button type="button" class="btn-secondary btn-small" id="btn-geocode-order-address" title="Localizar Coordenadas no Mapa">
+                    <i class="fa-solid fa-location-crosshairs"></i> Validar
+                  </button>
+                </div>
+                <div id="order-address-coords-status" class="coords-status-label"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="order-customer-name">Nome do Cliente</label>
+                  <div class="input-icon-wrapper">
+                    <i class="fa-solid fa-user field-icon"></i>
+                    <input type="text" id="order-customer-name" required placeholder="Ex: Lucas Souza">
+                  </div>
+                </div>
+                <div class="form-group col-6">
+                  <label for="order-customer-phone">Telefone / WhatsApp</label>
+                  <div class="input-icon-wrapper">
+                    <i class="fa-solid fa-phone field-icon"></i>
+                    <input type="tel" id="order-customer-phone" required placeholder="(11) 98888-1234">
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="order-package-details">Descrição do Pacote</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-box field-icon"></i>
+                  <input type="text" id="order-package-details" placeholder="Ex: 1x Pizza Família + Refrigerante 2L">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="order-price">Valor do Frete para o Motoboy</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-hand-holding-dollar field-icon"></i>
+                  <input type="text" id="order-price" value="R$ 16,50" required placeholder="R$ 16,50">
+                </div>
+              </div>
+              
+              <button type="submit" class="btn-primary" style="margin-top:14px; width:100%;">
+                <i class="fa-solid fa-bullhorn"></i> Publicar Frete para os Entregadores
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TELA DE HISTÓRICO ================= -->
+      <section id="view-historico" class="view-panel">
+        <div class="history-content">
+          <div class="section-page-header">
+            <h2><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Entregas</h2>
+            <p>Fretes e entregas concluídas com registro financeiro</p>
+          </div>
+          <div class="history-list" id="history-list">
+            <!-- Preenchido dinamicamente via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TELA DE AJUDA ================= -->
+      <section id="view-ajuda" class="view-panel">
+        <div class="help-content">
+          <h2>Como podemos ajudar?</h2>
+          
+          <div class="help-accordion-list">
+            <!-- Tópico 1: Problemas com o app -->
+            <div class="accordion-item" data-topic="app">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-purple">
+                    <i class="fa-solid fa-bug"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Problemas com o app</span>
+                    <span class="help-subtext">Relatar erros ou bugs</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Se você está enfrentando problemas técnicos, travamentos ou lentidão no aplicativo, siga os passos abaixo:</p>
+                <ul>
+                  <li>Verifique se há atualizações disponíveis na Google Play Store.</li>
+                  <li>Limpe o cache do aplicativo nas configurações do seu celular.</li>
+                  <li>Verifique sua conexão com a internet (Wi-Fi ou 4G/5G).</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Problemas com o app">
+                  <i class="fa-solid fa-comments"></i> Conversar com Suporte Técnico
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 2: Repasses & Ganhos -->
+            <div class="accordion-item" data-topic="payment">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-blue">
+                    <i class="fa-solid fa-hand-holding-dollar"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Repasses & Ganhos</span>
+                    <span class="help-subtext">Dúvidas sobre fretes e recebimentos</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Precisa de ajuda com seus ganhos de frete? Entenda como funcionam os repasses:</p>
+                <ul>
+                  <li><strong>Valores de Frete:</strong> Cada parada concluída no mapa credita o valor do frete diretamente no seu histórico.</li>
+                  <li><strong>Tempo de Espera:</strong> Caso o estabelecimento ou cliente atrase mais de 10 minutos para atender, você pode registrar ocorrência.</li>
+                  <li><strong>Comprovante de Entrega:</strong> Finalize a entrega no marcador do mapa ou bipando o QR Code para garantir a confirmação do pagamento.</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Dúvidas sobre Pagamentos de Frete">
+                  <i class="fa-solid fa-comments"></i> Conversar com Suporte Financeiro
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 3: Entregas & Ocorrências -->
+            <div class="accordion-item" data-topic="trips">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-red">
+                    <i class="fa-solid fa-box-open"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Entregas & Ocorrências</span>
+                    <span class="help-subtext">Cliente ausente, avaria ou endereço</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Encontre orientações para as ocorrências mais comuns no dia a dia de entregas:</p>
+                <ul>
+                  <li><strong>Cliente Ausente:</strong> Aguarde até 10 minutos e contate o lojista ou cliente pelo app. Se não atender, a devolução é autorizada.</li>
+                  <li><strong>Endereço Incorreto:</strong> Verifique os pontos no mapa otimizado antes de iniciar a rota para evitar desvios longos.</li>
+                  <li><strong>Avaria no Pacote:</strong> Caso a embalagem seja danificada no percurso, fotografe imediatamente e informe o lojista.</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Ocorrência de Entrega">
+                  <i class="fa-solid fa-comments"></i> Suporte de Ocorrências
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 4: SOS & Segurança -->
+            <div class="accordion-item" data-topic="safety">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-gold">
+                    <i class="fa-solid fa-wrench"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">SOS & Manutenção</span>
+                    <span class="help-subtext">Borracharias e socorro mecânico</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Sua segurança e a integridade da sua moto são essenciais:</p>
+                <ul>
+                  <li><strong>Botão SOS Flutuante:</strong> Toque no botão vermelho de SOS no mapa para ver oficinas mecânicas e borracharias parceiras próximas.</li>
+                  <li><strong>Manutenção Preventiva:</strong> Acompanhe no seu perfil o controle de troca de óleo, pneus e kit relação.</li>
+                  <li><strong>Emergência Policial (190):</strong> Em situações de risco ou sinistro grave, acione os órgãos competentes imediatamente.</li>
+                </ul>
+                <button class="btn-support-chat-trigger btn-small-action" data-subject="Suporte SOS e Segurança">
+                  <i class="fa-solid fa-shield-halved"></i> Contatar Suporte Emergencial
+                </button>
+              </div>
+            </div>
+
+            <!-- Tópico 5: Contato -->
+            <div class="accordion-item" data-topic="contact">
+              <div class="accordion-header">
+                <div class="header-left">
+                  <div class="help-icon-wrapper bg-pink">
+                    <i class="fa-solid fa-phone"></i>
+                  </div>
+                  <div class="help-title-info">
+                    <span class="help-title">Contato</span>
+                    <span class="help-subtext">Fale com o suporte</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+              </div>
+              <div class="accordion-body">
+                <p>Nossa central de atendimento ao cliente funciona 24 horas por dia, 7 dias por semana.</p>
+                <div class="contact-buttons-grid">
+                  <button class="btn-support-chat-trigger btn-primary btn-chat-general" data-subject="Atendimento Geral">
+                    <i class="fa-solid fa-comments"></i> Iniciar Chat de Suporte
+                  </button>
+                  <a href="tel:0800123456" class="btn-secondary btn-call-support">
+                    <i class="fa-solid fa-phone"></i> Ligar: 0800 123 456
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ================= DRAWER LATERAL DE PERFIL ================= -->
+    <div id="profile-drawer" class="drawer">
+      <div class="drawer-overlay" id="profile-drawer-overlay"></div>
+      <div class="drawer-content">
+        <div class="drawer-header">
+          <button class="btn-close-drawer" id="btn-close-profile"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <!-- Info do Usuário -->
+        <div class="drawer-user-info">
+          <div class="user-avatar-large">
+            <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150" alt="Avatar do Usuário" id="user-avatar-img">
+            <div class="user-avatar-placeholder hidden"><i class="fa-regular fa-user"></i></div>
+          </div>
+          <h2 id="user-display-name">João Silva</h2>
+          <span id="user-display-email">joao@email.com</span>
+          <div class="user-role-badge" id="user-role-badge">
+            <i class="fa-solid fa-motorcycle"></i> <span>Entregador (Moto)</span>
+          </div>
+        </div>
+
+        <!-- Links do Menu do Perfil (Design Idêntico) -->
+        <ul class="drawer-menu-list">
+          <li>
+            <button class="menu-item-btn" id="menu-btn-edit-profile">
+              <span class="menu-label">Editar Perfil</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li id="menu-item-moto-container">
+            <button class="menu-item-btn" id="menu-btn-moto-details">
+              <span class="menu-label"><i class="fa-solid fa-gauge-high"></i> Manutenção & Detalhes da Moto</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-payments">
+              <span class="menu-label">Métodos de Pagamento</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-saved-places">
+              <span class="menu-label">Lugares Salvos</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-settings">
+              <span class="menu-label">Configurações</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li>
+            <button class="menu-item-btn" id="menu-btn-privacy">
+              <span class="menu-label">Privacidade</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </li>
+          <li class="menu-item-logout-container">
+            <button class="menu-item-btn logout" id="menu-btn-logout">
+              <span class="menu-label">Sair</span>
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: EDITAR PERFIL ================= -->
+    <div class="modal hidden" id="modal-edit-profile">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Editar Perfil</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <form id="form-edit-profile" class="form-premium">
+            <div class="form-avatar-picker">
+              <div class="avatar-preview">
+                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150" alt="Avatar" id="edit-avatar-preview">
+              </div>
+              <div class="picker-options">
+                <button type="button" class="btn-secondary btn-small" id="btn-change-avatar-random">Trocar Foto</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="input-profile-name">Nome Completo</label>
+              <input type="text" id="input-profile-name" value="João Silva" required placeholder="Digite seu nome">
+            </div>
+            <div class="form-group">
+              <label for="input-profile-email">E-mail</label>
+              <input type="email" id="input-profile-email" value="joao@email.com" required placeholder="Digite seu e-mail">
+            </div>
+            <div class="form-group">
+              <label for="input-profile-phone">Telefone</label>
+              <input type="tel" id="input-profile-phone" value="(11) 98765-4321" placeholder="Digite seu telefone">
+            </div>
+            <button type="submit" class="btn-primary">Salvar Alterações</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: MÉTODOS DE PAGAMENTO ================= -->
+    <div class="modal hidden" id="modal-payments">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Métodos de Pagamento</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="payments-container">
+            <h4>Seus Cartões Salvos</h4>
+            <div class="cards-list" id="payment-cards-list">
+              <!-- Renderizado dinamicamente pelo JS -->
+            </div>
+
+            <!-- Adicionar Novo Cartão Form com Efeito Visual -->
+            <div class="add-card-section">
+              <button class="btn-secondary" id="btn-toggle-add-card">
+                <i class="fa-solid fa-plus"></i> Adicionar Novo Cartão
+              </button>
+              
+              <div id="add-card-form-wrapper" class="hidden-form hidden">
+                <!-- Visualização 3D do Cartão -->
+                <div class="credit-card-preview-container">
+                  <div class="credit-card-preview card-bg-visa" id="preview-card-bg">
+                    <div class="card-glow"></div>
+                    <div class="card-header-preview">
+                      <div class="card-chip"></div>
+                      <div class="card-brand-logo" id="preview-card-brand">
+                        <i class="fa-brands fa-cc-visa"></i>
+                      </div>
+                    </div>
+                    <div class="card-number-preview" id="preview-card-number">•••• •••• •••• ••••</div>
+                    <div class="card-footer-preview">
+                      <div class="card-holder-wrapper">
+                        <span class="card-label">TITULAR</span>
+                        <div class="card-holder-preview-val" id="preview-card-holder">NOME COMPLETO</div>
+                      </div>
+                      <div class="card-expiry-wrapper">
+                        <span class="card-label">VALIDADE</span>
+                        <div class="card-expiry-preview-val" id="preview-card-expiry">MM/AA</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <form id="form-add-card" class="form-premium">
+                  <div class="form-group">
+                    <label for="input-card-number">Número do Cartão</label>
+                    <input type="text" id="input-card-number" placeholder="4000 1234 5678 9010" maxlength="19" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="input-card-holder">Nome Impresso no Cartão</label>
+                    <input type="text" id="input-card-holder" placeholder="JOAO SILVA" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group col-6">
+                      <label for="input-card-expiry">Validade</label>
+                      <input type="text" id="input-card-expiry" placeholder="12/30" maxlength="5" required>
+                    </div>
+                    <div class="form-group col-6">
+                      <label for="input-card-cvv">CVV</label>
+                      <input type="password" id="input-card-cvv" placeholder="•••" maxlength="4" required>
+                    </div>
+                  </div>
+                  <button type="submit" class="btn-primary">Cadastrar Cartão</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: LUGARES SALVOS ================= -->
+    <div class="modal hidden" id="modal-saved-places">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Lugares Salvos</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="saved-places-list" id="saved-places-list">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+          <button class="btn-primary" id="btn-add-saved-place" style="margin-top: 15px;">
+            <i class="fa-solid fa-plus"></i> Adicionar Endereço Favorito
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: CONFIGURAÇÕES ================= -->
+    <div class="modal hidden" id="modal-settings">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Configurações</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <ul class="settings-options-list">
+            <li class="settings-item">
+              <div class="settings-info">
+                <span class="settings-title">Modo Escuro</span>
+                <span class="settings-desc">Ativar tema escuro no aplicativo</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-dark-mode">
+                <span class="slider"></span>
+              </label>
+            </li>
+            <li class="settings-item">
+              <div class="settings-info">
+                <span class="settings-title">Notificações Push</span>
+                <span class="settings-desc">Atualizações sobre motoristas e descontos</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-push-notif" checked>
+                <span class="slider"></span>
+              </label>
+            </li>
+            <li class="settings-item">
+              <div class="settings-info">
+                <span class="settings-title">Sons no Aplicativo</span>
+                <span class="settings-desc">Alertas sonoros de chegada e mensagens</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-sounds" checked>
+                <span class="slider"></span>
+              </label>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: PRIVACIDADE ================= -->
+    <div class="modal hidden" id="modal-privacy">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3>Privacidade</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body privacy-body">
+          <div class="privacy-rich-text">
+            <h4>Proteção de Dados e Termos de Uso</h4>
+            <p>Seus dados são protegidos sob a Lei Geral de Proteção de Dados (LGPD). Nós coletamos apenas as informações estritamente necessárias para a prestação do serviço de transporte:</p>
+            <ul>
+              <li><strong>Localização em tempo real:</strong> Utilizada para conectar você com os motoristas mais próximos e traçar a rota com precisão.</li>
+              <li><strong>Dados de perfil:</strong> Nome, email e telefone são compartilhados de forma restrita com o motorista aceito apenas durante a viagem ativa.</li>
+              <li><strong>Dados financeiros:</strong> Informações de cartão de crédito são criptografadas e salvas diretamente em parceiros de pagamento certificados (PCI-DSS), nunca armazenados cruamente em nossos servidores.</li>
+            </ul>
+            <p>Para dúvidas ou exclusão de conta, entre em contato diretamente com o nosso DPO pelo chat de ajuda.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= CHAT DE SUPORTE EM TEMPO REAL ================= -->
+    <div class="modal hidden" id="modal-support-chat">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper chat-wrapper">
+        <div class="modal-header chat-header">
+          <div class="chat-title-container">
+            <div class="chat-agent-avatar"><i class="fa-solid fa-headset"></i></div>
+            <div class="chat-agent-info">
+              <span class="agent-name" id="chat-subject-title">Suporte Técnico</span>
+              <span class="agent-status"><span class="dot-online"></span> Atendente Online</span>
+            </div>
+          </div>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body chat-body" id="chat-messages-container">
+          <!-- Mensagens renderizadas dinamicamente via JS -->
+          <div class="chat-bubble received">
+            Olá, João! Sou o assistente virtual da AppEntrega. Como posso te ajudar com o tema <strong id="chat-bold-subject">Problemas com o app</strong> hoje?
+            <span class="bubble-time">Agora mesmo</span>
+          </div>
+        </div>
+        <div class="chat-footer">
+          <input type="text" id="input-chat-message" placeholder="Digite uma mensagem..." autocomplete="off">
+          <button id="btn-send-chat-msg" class="btn-send-msg" aria-label="Enviar mensagem">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: LEITOR DE QR CODE ================= -->
+    <div class="modal hidden" id="modal-qr-scanner">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper qr-scanner-wrapper">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-qrcode"></i> Leitor de QR Code</h3>
+          <button class="btn-close-modal" id="btn-close-qr-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body text-center">
+          <!-- Viewport da Câmera -->
+          <div class="qr-camera-container">
+            <video id="qr-video" playsinline></video>
+            <div class="qr-scanner-overlay">
+              <div class="qr-target-box">
+                <div class="scan-corner top-left"></div>
+                <div class="scan-corner top-right"></div>
+                <div class="scan-corner bottom-left"></div>
+                <div class="scan-corner bottom-right"></div>
+                <div class="scan-line"></div>
+              </div>
+            </div>
+            <div id="qr-camera-fallback" class="qr-camera-fallback">
+              <i class="fa-solid fa-camera"></i>
+              <span>Câmera pronta para scanner</span>
+            </div>
+          </div>
+          
+          <p class="qr-instructions">Aponte a câmera para o QR Code da entrega para fazer a leitura.</p>
+
+          <div class="qr-manual-input-box">
+            <label for="input-qr-manual">Ou digite o código manualmente:</label>
+            <div class="input-icon-wrapper" style="margin-top: 6px;">
+              <i class="fa-solid fa-barcode field-icon"></i>
+              <input type="text" id="input-qr-manual" placeholder="Ex: ENT-89241">
+              <button type="button" class="btn-primary btn-small" id="btn-confirm-qr-manual">Validar</button>
+            </div>
+          </div>
+
+          <button type="button" class="btn-secondary" id="btn-simulate-qr" style="margin-top: 14px; width: 100%;">
+            <i class="fa-solid fa-bolt"></i> Simular Leitura de QR Code
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: CARTEIRA & CONTROLE FINANCEIRO ================= -->
+    <div class="modal hidden" id="modal-wallet">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper wallet-modal-wrapper" style="max-height: 92vh;">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-wallet" style="color: #10b981;"></i> Carteira & Finanças</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          
+          <!-- Balanço / Resumo dos 3 Cartões -->
+          <div class="wallet-balance-card-v2">
+            <div class="wallet-stat-item">
+              <span class="stat-label"><i class="fa-solid fa-arrow-trend-up"></i> Ganhos</span>
+              <span class="stat-value text-success" id="wallet-total-receitas">R$ 0,00</span>
+            </div>
+            <div class="wallet-stat-divider"></div>
+            <div class="wallet-stat-item">
+              <span class="stat-label"><i class="fa-solid fa-arrow-trend-down"></i> Gastos</span>
+              <span class="stat-value text-danger" id="wallet-total-despesas">R$ 0,00</span>
+            </div>
+            <div class="wallet-stat-divider"></div>
+            <div class="wallet-stat-item highlight">
+              <span class="stat-label"><i class="fa-solid fa-scale-balanced"></i> Saldo Líquido</span>
+              <span class="stat-value text-primary-val" id="wallet-saldo-liquido">R$ 0,00</span>
+            </div>
+          </div>
+
+          <!-- Abas da Carteira -->
+          <div class="custom-tabs-nav">
+            <button type="button" class="tab-btn active" id="tab-btn-wallet-extrato" data-tab="wallet-tab-extrato">
+              <i class="fa-solid fa-list-ul"></i> Extrato
+            </button>
+            <button type="button" class="tab-btn" id="tab-btn-wallet-novo" data-tab="wallet-tab-novo">
+              <i class="fa-solid fa-circle-plus"></i> Novo Lançamento
+            </button>
+          </div>
+
+          <!-- Aba 1: Extrato -->
+          <div id="wallet-tab-extrato" class="custom-tab-content active">
+            <!-- Filtros Rápidos -->
+            <div class="wallet-filter-row">
+              <button type="button" class="filter-pill active" data-filter="all">Todos</button>
+              <button type="button" class="filter-pill" data-filter="receita"><i class="fa-solid fa-arrow-up"></i> Ganhos</button>
+              <button type="button" class="filter-pill" data-filter="despesa"><i class="fa-solid fa-arrow-down"></i> Gastos</button>
+            </div>
+
+            <!-- Lista de Transações -->
+            <div id="wallet-transactions-list" class="transactions-list">
+              <!-- Preenchido via JS -->
+            </div>
+          </div>
+
+          <!-- Aba 2: Novo Lançamento -->
+          <div id="wallet-tab-novo" class="custom-tab-content hidden">
+            <form id="form-add-transaction" class="form-premium" style="margin-top: 10px;">
+              <!-- Seletor Tipo: Ganho ou Gasto -->
+              <div class="type-toggle-group">
+                <button type="button" class="type-btn active" id="type-btn-receita" data-type="receita">
+                  <i class="fa-solid fa-circle-up"></i> Ganho / Receita
+                </button>
+                <button type="button" class="type-btn" id="type-btn-despesa" data-type="despesa">
+                  <i class="fa-solid fa-circle-down"></i> Gasto / Despesa
+                </button>
+              </div>
+              <input type="hidden" id="input-tx-type" value="receita">
+
+              <div class="form-group">
+                <label for="input-tx-amount">Valor (R$) <span class="label-required">*</span></label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-brazilian-real-sign field-icon"></i>
+                  <input type="number" step="0.01" min="0.01" id="input-tx-amount" placeholder="Ex: 100.00" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-tx-category">Categoria <span class="label-required">*</span></label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-tags field-icon"></i>
+                  <select id="input-tx-category" class="custom-select" required>
+                    <!-- Dinâmico via JS -->
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-tx-desc">Descrição / Detalhe</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-pencil field-icon"></i>
+                  <input type="text" id="input-tx-desc" placeholder="Ex: Corridas da manhã, Posto BR...">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-tx-date">Data</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-calendar-day field-icon"></i>
+                  <input type="date" id="input-tx-date" required>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-primary" style="margin-top: 6px;">
+                <i class="fa-solid fa-check"></i> Salvar Lançamento
+              </button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: MANUTENÇÃO E DETALHES DA MOTO ================= -->
+    <div class="modal hidden" id="modal-moto-details">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper moto-modal-wrapper" style="max-height: 92vh;">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-motorcycle" style="color:#f59e0b;"></i> Manutenção da Moto</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          
+          <!-- Abas: Minhas Manutenções, Novo Registro, Consumo Moto -->
+          <div class="custom-tabs-nav">
+            <button type="button" class="tab-btn active" id="tab-btn-manut-lista" data-tab="manut-tab-lista">
+              <i class="fa-solid fa-wrench"></i> Histórico
+            </button>
+            <button type="button" class="tab-btn" id="tab-btn-manut-nova" data-tab="manut-tab-nova">
+              <i class="fa-solid fa-circle-plus"></i> Novo Registro
+            </button>
+            <button type="button" class="tab-btn" id="tab-btn-manut-config" data-tab="manut-tab-config">
+              <i class="fa-solid fa-gas-pump"></i> Moto & Consumo
+            </button>
+          </div>
+
+          <!-- Aba 1: Lista de Manutenções & Balanço Contábil -->
+          <div id="manut-tab-lista" class="custom-tab-content active">
+            <!-- Balanço de Manutenção -->
+            <div class="manut-summary-card">
+              <div class="manut-summary-item">
+                <span class="m-label"><i class="fa-solid fa-coins"></i> Total Investido</span>
+                <strong class="m-val" id="manut-total-gasto">R$ 0,00</strong>
+              </div>
+              <div class="manut-summary-divider"></div>
+              <div class="manut-summary-item">
+                <span class="m-label"><i class="fa-solid fa-clipboard-list"></i> Trocas Feitas</span>
+                <strong class="m-val" id="manut-total-count">0</strong>
+              </div>
+            </div>
+
+            <!-- Botão rápido para adicionar -->
+            <button type="button" class="btn-secondary" id="btn-quick-add-manut" style="width: 100%; margin: 12px 0; display:flex; align-items:center; justify-content:center; gap:8px;">
+              <i class="fa-solid fa-plus-circle"></i> Adicionar Nova Manutenção / Troca
+            </button>
+
+            <!-- Lista de Registros -->
+            <div id="manut-records-list" class="manut-records-list">
+              <!-- Renderizado via JS -->
+            </div>
+          </div>
+
+          <!-- Aba 2: Formulário de Nova Manutenção -->
+          <div id="manut-tab-nova" class="custom-tab-content hidden">
+            <form id="form-add-manut" class="form-premium" style="margin-top: 10px;">
+              <div class="form-group">
+                <label for="input-manut-item">Item / Peça / Serviço <span class="label-required">*</span></label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-toolbox field-icon"></i>
+                  <select id="input-manut-item" class="custom-select" required>
+                    <option value="Óleo do Motor">🛢️ Óleo do Motor</option>
+                    <option value="Pneu Traseiro">⚫ Pneu Traseiro</option>
+                    <option value="Pneu Dianteiro">⚫ Pneu Dianteiro</option>
+                    <option value="Kit Relação (Coroa/Pinhão/Corrente)">⚙️ Kit de Relação</option>
+                    <option value="Pastilha de Freio">🛑 Pastilhas / Freios</option>
+                    <option value="Vela de Ignição">⚡ Vela de Ignição</option>
+                    <option value="Filtro de Ar / Combustível">💨 Filtro de Ar / Combustível</option>
+                    <option value="Bateria">🔋 Bateria</option>
+                    <option value="Revisão Geral">🛠️ Revisão Geral</option>
+                    <option value="Outro">🔧 Outro Serviço</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-manut-km">Km da Moto no Momento da Troca <span class="label-required">*</span></label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-gauge-high field-icon"></i>
+                  <input type="number" id="input-manut-km" placeholder="Ex: 17000" min="0" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-manut-cost">Valor Gasto (R$) <span class="label-required">*</span></label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-brazilian-real-sign field-icon"></i>
+                  <input type="number" step="0.01" min="0" id="input-manut-cost" placeholder="Ex: 400.00" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-manut-next-km">Km Previsto para a Próxima Troca</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-bell field-icon"></i>
+                  <input type="number" id="input-manut-next-km" placeholder="Ex: 32000">
+                </div>
+                <small style="color:var(--color-text-muted); font-size:0.74rem; margin-top:3px; display:block;">
+                  💡 Sugestão automática ao preencher o Km (você pode editar livremente).
+                </small>
+              </div>
+
+              <div class="form-group">
+                <label for="input-manut-date">Data da Troca</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-calendar-check field-icon"></i>
+                  <input type="date" id="input-manut-date" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-manut-notes">Oficina / Marca / Detalhes (Opcional)</label>
+                <div class="input-icon-wrapper">
+                  <i class="fa-solid fa-note-sticky field-icon"></i>
+                  <input type="text" id="input-manut-notes" placeholder="Ex: Pneu Pirelli na Oficina do Marcão">
+                </div>
+              </div>
+
+              <!-- Opção de lançar direto na Carteira como Despesa -->
+              <div style="display:flex; align-items:center; gap:10px; margin: 4px 0; background:rgba(239,68,68,0.06); padding:10px; border-radius:8px; border:1px solid rgba(239,68,68,0.2);">
+                <input type="checkbox" id="check-manut-to-wallet" checked style="width:18px; height:18px; accent-color:#ef4444; cursor:pointer;">
+                <label for="check-manut-to-wallet" style="font-size:0.8rem; cursor:pointer; color:var(--color-text-primary);">
+                  Lançar também como <strong>Despesa de Manutenção</strong> na Carteira
+                </label>
+              </div>
+
+              <button type="submit" class="btn-primary" style="margin-top: 8px;">
+                <i class="fa-solid fa-floppy-disk"></i> Salvar Registro de Manutenção
+              </button>
+            </form>
+          </div>
+
+          <!-- Aba 3: Configuração e Consumo Médio da Moto -->
+          <div id="manut-tab-config" class="custom-tab-content hidden">
+            <form id="form-moto-details" class="form-premium" style="margin-top: 10px;">
+              <div class="form-group">
+                <label for="input-moto-consumption"><i class="fa-solid fa-gas-pump"></i> Consumo Médio da Moto (km/L):</label>
+                <input type="number" step="0.1" id="input-moto-consumption" placeholder="Ex: 35.0" min="1" required>
+              </div>
+
+              <div class="form-group">
+                <label for="input-moto-odometer"><i class="fa-solid fa-gauge"></i> Km Atual da Moto (Hodômetro):</label>
+                <input type="number" id="input-moto-odometer" placeholder="Ex: 17500" min="0">
+                <small style="color:var(--color-text-muted); font-size:0.74rem; margin-top:2px; display:block;">
+                  Utilizado para avisar quando estiver próximo da troca das peças cadastradas.
+                </small>
+              </div>
+
+              <!-- Inputs legados mantidos para compatibilidade com o backend Supabase -->
+              <input type="hidden" id="input-moto-oil-km" value="0">
+              <input type="hidden" id="input-moto-tires-km" value="0">
+              <input type="hidden" id="input-moto-chain-km" value="0">
+
+              <button type="submit" class="btn-primary" style="margin-top: 16px;">Salvar Configurações da Moto</button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: ASSISTÊNCIA EMERGENCIAL (SOS & TELEFONES ÚTEIS) ================= -->
+    <div class="modal hidden" id="modal-sos">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper sos-modal-wrapper" style="max-height: 90vh;">
+        <div class="modal-header">
+          <h3 style="color:#ef4444;"><i class="fa-solid fa-phone-volume"></i> Telefones de Socorro & Borracharias</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="sos-banner">
+            <i class="fa-solid fa-phone-flip"></i>
+            <div>
+              <strong>Contatos Telefônicos de Socorro Próximos</strong>
+              <p>Ligue diretamente para borracharias e mecânicas da sua região para socorro imediato.</p>
+            </div>
+          </div>
+
+          <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.74rem; color: var(--color-text-primary); display:flex; align-items:center; gap:8px;">
+            <span style="font-size:1.1rem;">💡</span>
+            <span><strong>Dica:</strong> Postos ⛽, borracharias 🛞 e mecânicas 🔧 também aparecem como pins com emojis direto no seu mapa!</span>
+          </div>
+
+          <!-- Lista dos 3 mais próximos com telefone em destaque -->
+          <div class="sos-list" id="sos-merchants-list">
+            <!-- Preenchido dinamicamente via JS -->
+          </div>
+
+          <!-- Números de Emergência Nacional -->
+          <div style="margin-top: 16px; border-top: 1px solid var(--color-border, #e2e8f0); padding-top: 14px;">
+            <span style="font-size: 0.72rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">
+              <i class="fa-solid fa-shield-heart"></i> Telefones de Emergência Nacional
+            </span>
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+              <a href="tel:192" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); color:#ef4444; text-decoration:none; border-radius:10px; padding:8px 4px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:2px;">
+                <strong style="font-size:0.95rem;">192</strong>
+                <span style="font-size:0.65rem; font-weight:700;">SAMU</span>
+              </a>
+              <a href="tel:193" style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); color:#d97706; text-decoration:none; border-radius:10px; padding:8px 4px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:2px;">
+                <strong style="font-size:0.95rem;">193</strong>
+                <span style="font-size:0.65rem; font-weight:700;">Bombeiros</span>
+              </a>
+              <a href="tel:190" style="background:rgba(37,99,235,0.1); border:1px solid rgba(37,99,235,0.3); color:#2563eb; text-decoration:none; border-radius:10px; padding:8px 4px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:2px;">
+                <strong style="font-size:0.95rem;">190</strong>
+                <span style="font-size:0.65rem; font-weight:700;">Polícia Militar</span>
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SUB-MODAL: ROTEIRIZADOR DE ENTREGAS (OSRM + SOLVER OR-TOOLS) ================= -->
+    <div class="modal hidden" id="modal-route-optimizer">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper route-modal-wrapper">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-route"></i> Otimizador de Rotas (OSRM + OR-Tools)</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <p class="route-subtitle">O OSRM calcula a matriz de tempo/distância entre todas as entregas e o solver de otimização (OR-Tools style) encontra o melhor percurso.</p>
+
+          <div class="route-actions-top">
+            <button type="button" class="btn-secondary btn-small" id="btn-load-sample-6stops">
+              <i class="fa-solid fa-bolt"></i> Carregar 6 Entregas Exemplo em SP
+            </button>
+            <button type="button" class="btn-secondary btn-small danger" id="btn-clear-stops">
+              <i class="fa-solid fa-trash-can"></i> Limpar Paradas
+            </button>
+          </div>
+
+          <div class="route-stops-container">
+            <h4><i class="fa-solid fa-location-dot"></i> Pontos de Parada da Entrega (<span id="stops-count">0</span>)</h4>
+            
+            <div id="stops-list" class="stops-list">
+              <!-- Renderizado dinamicamente pelo JS -->
+            </div>
+
+            <!-- Adicionar Nova Parada com Busca de Endereço -->
+            <div class="add-stop-box">
+              <label><i class="fa-solid fa-magnifying-glass"></i> Buscar endereço para parada:</label>
+              <div class="search-stop-inline">
+                <input type="text" id="input-search-stop-address" placeholder="Ex: Rua Augusta 500 ou Shopping Eldorado">
+                <button type="button" class="btn-primary btn-small" id="btn-search-stop-address">
+                  <i class="fa-solid fa-search"></i> Buscar
+                </button>
+              </div>
+              <div id="search-address-results" class="search-address-results hidden"></div>
+
+              <div class="manual-stop-inputs" style="margin-top:10px;">
+                <label>Confirmar dados do ponto:</label>
+                <input type="text" id="input-new-stop-name" placeholder="Nome do Local / Cliente">
+                <div class="latlng-inline">
+                  <input type="number" step="0.0001" id="input-new-stop-lat" placeholder="Latitude (-23.56)">
+                  <input type="number" step="0.0001" id="input-new-stop-lng" placeholder="Longitude (-46.65)">
+                </div>
+                <button type="button" class="btn-secondary btn-small" id="btn-add-custom-stop" style="margin-top:6px; width:100%;">
+                  <i class="fa-solid fa-plus"></i> Adicionar Ponto de Entrega
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Botão de Ação do Solver -->
+          <button type="button" class="btn-primary" id="btn-solve-route" style="margin-top: 16px; width: 100%;">
+            <i class="fa-solid fa-bolt"></i> Otimizar Rota
+          </button>
+
+          <!-- Painel de Resultados da Otimização -->
+          <div id="route-solution-panel" class="route-solution-panel hidden">
+            <div class="solution-header">
+              <i class="fa-solid fa-circle-check"></i>
+              <span>Rota Otimizada com Sucesso!</span>
+            </div>
+
+            <div class="route-metrics">
+              <div class="metric-card">
+                <span class="metric-val" id="metric-dist">0.0 km</span>
+                <span class="metric-lbl">Distância Total</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-val" id="metric-time">0 min</span>
+                <span class="metric-lbl">Tempo Estimado</span>
+              </div>
+              <div class="metric-card highlight">
+                <span class="metric-val" id="metric-saved">0%</span>
+                <span class="metric-lbl">Economia Relevante</span>
+              </div>
+            </div>
+
+            <h5><i class="fa-solid fa-list-ol"></i> Sequência Ideal de Visita:</h5>
+            <div id="optimized-sequence-list" class="optimized-sequence-list">
+              <!-- Renderizado dinamicamente pelo JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: TERMINE DE CONFIGURAR SEU PERFIL ================= -->
+    <div class="modal hidden" id="modal-complete-profile">
+      <div class="modal-overlay"></div>
+      <div class="modal-wrapper">
+        <div class="modal-header">
+          <h3 style="color:#f59e0b;"><i class="fa-solid fa-id-card-clip"></i> Termine de configurar seu perfil</h3>
+          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="profile-required-banner">
+            <i class="fa-solid fa-shield-halved"></i>
+            <div>
+              <strong>Dados obrigatórios para entrega</strong>
+              <p>Para sua segurança e dos lojistas parceiros, é necessário informar seu CPF, CNH e Placa da moto antes de aceitar fretes.</p>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:14px;">
+            <label for="complete-profile-cpf">CPF do Entregador <span class="label-required">*</span></label>
+            <div class="input-icon-wrapper">
+              <i class="fa-solid fa-id-card field-icon"></i>
+              <input type="text" id="complete-profile-cpf" placeholder="000.000.000-00" maxlength="14" inputmode="numeric">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="complete-profile-plate">Placa da Moto <span class="label-required">*</span></label>
+            <div class="input-icon-wrapper">
+              <i class="fa-solid fa-motorcycle field-icon"></i>
+              <input type="text" id="complete-profile-plate" placeholder="ABC-1234 ou ABC1D23" style="text-transform: uppercase;" maxlength="10">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="complete-profile-cnh">Número da CNH <span class="label-required">*</span></label>
+            <div class="input-icon-wrapper">
+              <i class="fa-solid fa-address-card field-icon"></i>
+              <input type="text" id="complete-profile-cnh" placeholder="00000000000" maxlength="11" inputmode="numeric">
+            </div>
+          </div>
+
+          <div id="complete-profile-error" class="auth-error-banner hidden"></div>
+
+          <button type="button" class="btn-primary" id="btn-save-complete-profile" style="width:100%; margin-top:14px;">
+            <i class="fa-solid fa-check"></i> Salvar e Continuar com a Rota
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notificações Flutuantes (Toast) -->
+    <div id="toast-container"></div>
+    
+  </div>
+
+  <!-- Leaflet Map Library Javascript -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Supabase Cloud JS Library CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Supabase Cloud Configuration -->
+  <script src="supabase-config.js"></script>
+
+  <!-- Database Unified Layer -->
+  <script src="db.js"></script>
+  
+  <!-- Map & OSRM Routing Configuration -->
+  <script src="map-config.js"></script>
+
+  <!-- Application Main Logic -->
+  <script src="index.js"></script>
+</body>
+</html>

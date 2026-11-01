@@ -1,0 +1,137 @@
+/*
+ * Script Seeder para testes de Endpoints e Banco de Dados (AppEntrega-TCC)
+ * Uso: node seed.js
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const SEED_DATA = {
+  entregadores: [
+    {
+      id: 'e3b0c442-98fc-11ee-b9d1-0242ac120001',
+      name: 'João Silva',
+      email: 'joao.entregador@email.com',
+      password: '123',
+      phone: '(11) 98765-4321',
+      user_type: 'entregador',
+      cpf: '123.456.789-00',
+      vehicle_type: 'Moto',
+      vehicle_plate: 'ABC-1234',
+      cnh: '12345678900',
+      is_online: true,
+      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150'
+    },
+    {
+      id: 'e3b0c442-98fc-11ee-b9d1-0242ac120002',
+      name: 'Carlos Eduardo',
+      email: 'carlos.moto@email.com',
+      password: '123',
+      phone: '(11) 97777-1111',
+      user_type: 'entregador',
+      cpf: '987.654.321-11',
+      vehicle_type: 'Moto',
+      vehicle_plate: 'XYZ-9876',
+      cnh: '98765432100',
+      is_online: true,
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'
+    },
+    {
+      id: 'e3b0c442-98fc-11ee-b9d1-0242ac120003',
+      name: 'Lucas Mendes',
+      email: 'lucas.entregas@email.com',
+      password: '123',
+      phone: '(11) 96666-2222',
+      user_type: 'entregador',
+      cpf: '456.789.123-22',
+      vehicle_type: 'Moto',
+      vehicle_plate: 'MOT-5544',
+      cnh: '45678912300',
+      is_online: false,
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
+    }
+  ],
+  lojistas: [
+    {
+      id: 'f4b1d553-99fd-11ee-b9d1-0242ac120001',
+      name: 'Matheus Oliveira',
+      email: 'pizzaria@email.com',
+      password: '123',
+      phone: '(11) 99999-9999',
+      user_type: 'lojista',
+      store_name: 'Pizzaria do Matheus',
+      cnpj_cpf: '12.345.678/0001-99',
+      category: 'Restaurante',
+      address: 'Av. Paulista, 2000 - Bela Vista, São Paulo - SP',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150'
+    },
+    {
+      id: 'f4b1d553-99fd-11ee-b9d1-0242ac120002',
+      name: 'Fernanda Lima',
+      email: 'burgershop@email.com',
+      password: '123',
+      phone: '(11) 98888-3333',
+      user_type: 'lojista',
+      store_name: 'Burger Express',
+      cnpj_cpf: '98.765.432/0001-11',
+      category: 'Restaurante',
+      address: 'Rua Augusta, 500 - Consolação, São Paulo - SP',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150'
+    },
+    {
+      id: 'f4b1d553-99fd-11ee-b9d1-0242ac120003',
+      name: 'Roberto Alves',
+      email: 'farmacia.central@email.com',
+      password: '123',
+      phone: '(11) 95555-4444',
+      user_type: 'lojista',
+      store_name: 'Farmácia Central 24h',
+      cnpj_cpf: '55.443.322/0001-88',
+      category: 'Farmácia',
+      address: 'Av. Rebouças, 1200 - Pinheiros, São Paulo - SP',
+      avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=150'
+    },
+    {
+      id: 'f4b1d553-99fd-11ee-b9d1-0242ac120004',
+      name: 'Marcos Souza',
+      email: 'borracharia.rapida@email.com',
+      password: '123',
+      phone: '(11) 94444-5555',
+      user_type: 'lojista',
+      store_name: 'Borracharia & AutoPeças Express',
+      cnpj_cpf: '33.221.100/0001-44',
+      category: 'Borracharia / Auto Peças',
+      address: 'Av. Santo Amaro, 800 - Itaim Bibi, São Paulo - SP',
+      avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=150'
+    }
+  ]
+};
+
+function runSeeder() {
+  console.log('================================================================');
+  console.log('🚀 SEEDER DE DADOS DE TESTE - APP ENTREGA (TCC)');
+  console.log('================================================================');
+  
+  console.log(`\n🛵 ENTREGADORES DE MOTO MOCKADOS (${SEED_DATA.entregadores.length}):`);
+  SEED_DATA.entregadores.forEach((driver, idx) => {
+    console.log(`  [${idx + 1}] ${driver.name} | E-mail: ${driver.email} | Senha: ${driver.password} | Moto: ${driver.vehicle_plate} (CNH: ${driver.cnh})`);
+  });
+
+  console.log(`\n🏪 LOJISTAS / ESTABELECIMENTOS MOCKADOS (${SEED_DATA.lojistas.length}):`);
+  SEED_DATA.lojistas.forEach((store, idx) => {
+    console.log(`  [${idx + 1}] ${store.store_name} (Resp: ${store.name}) | E-mail: ${store.email} | Senha: ${store.password} | Cat: ${store.category}`);
+  });
+
+  const outputPath = path.join(__dirname, 'seed_data.json');
+  fs.writeFileSync(outputPath, JSON.stringify(SEED_DATA, null, 2), 'utf-8');
+
+  console.log('\n================================================================');
+  console.log(`✅ Arquivo JSON gerado com sucesso em: ${outputPath}`);
+  console.log('================================================================\n');
+}
+
+if (require.main === module) {
+  runSeeder();
+}
+
+module.exports = SEED_DATA;

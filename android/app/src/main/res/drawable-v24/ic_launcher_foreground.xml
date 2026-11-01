@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportHeight="108"
+    android:viewportWidth="108">
+
+    <!-- Outer dark circle -->
+    <path
+        android:fillColor="#0f172a"
+        android:pathData="M54,12 C31.91,12 14,29.91 14,52 C14,74.09 31.91,92 54,92 C76.09,92 94,74.09 94,52 C94,29.91 76.09,12 54,12 Z" />
+
+    <!-- Green ring accent -->
+    <path
+        android:fillColor="#10b981"
+        android:pathData="M54,16 C34.12,16 18,32.12 18,52 C18,72.09 34.23,88 54,88 C73.88,88 90,72.09 90,52 C90,32.12 73.88,16 54,16 Z
+                          M54,20 C71.67,20 86,34.33 86,52 C86,69.67 71.67,84 54,84 C36.33,84 22,69.67 22,52 C22,34.33 36.33,20 54,20 Z" />
+
+    <!-- Inner dark area -->
+    <path
+        android:fillColor="#0f172a"
+        android:pathData="M54,20 C36.33,20 22,34.33 22,52 C22,69.67 36.33,84 54,84 C71.67,84 86,69.67 86,52 C86,34.33 71.67,20 54,20 Z" />
+
+    <!-- Lightning bolt (centered, green) -->
+    <path
+        android:fillColor="#10b981"
+        android:pathData="M60,28 L43,52 L53,52 L48,76 L67,50 L56,50 Z" />
+
+    <!-- Blue accent dot top-right of bolt -->
+    <path
+        android:fillColor="#2563eb"
+        android:pathData="M64,33 C64,30.79 65.79,29 68,29 C70.21,29 72,30.79 72,33 C72,35.21 70.21,37 68,37 C65.79,37 64,35.21 64,33 Z" />
+</vector>
