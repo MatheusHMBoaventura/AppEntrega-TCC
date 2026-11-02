@@ -207,17 +207,32 @@ input {
   gap: 10px;
 }
 
+.brand-logo-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(252, 149, 11, 0.35);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  border: 1px solid rgba(252, 149, 11, 0.2);
+}
+
+.brand-logo-badge:hover {
+  transform: scale(1.08);
+}
+
 .brand-emblem-badge {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #2563eb, #10b981);
+  background: linear-gradient(135deg, #FC950B, #FFB020);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
   font-size: 1.15rem;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 4px 12px rgba(252, 149, 11, 0.35);
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
@@ -241,7 +256,7 @@ input {
 }
 
 .brand-name-accent {
-  background: linear-gradient(135deg, #2563eb, #10b981);
+  background: linear-gradient(135deg, #FC950B, #FFB020);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-weight: 900;
@@ -251,7 +266,7 @@ input {
   font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 1.6px;
-  color: #10b981;
+  color: #FC950B;
   text-transform: uppercase;
 }
 
@@ -266,19 +281,35 @@ input {
 
 .auth-brand-emblem-large {
   position: relative;
-  width: 72px;
-  height: 72px;
+  width: 82px;
+  height: 82px;
   margin-bottom: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.auth-brand-logo-img {
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  object-fit: contain;
+  box-shadow: 0 8px 24px rgba(252, 149, 11, 0.35), 0 2px 8px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 2;
+  border: 1px solid rgba(252, 149, 11, 0.3);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.auth-brand-logo-img:hover {
+  transform: scale(1.06);
+}
+
 .emblem-glow-ring {
   position: absolute;
   inset: -4px;
   border-radius: 22px;
-  background: linear-gradient(135deg, #2563eb, #10b981);
+  background: linear-gradient(135deg, #FC950B, #FFB020);
   opacity: 0.5;
   filter: blur(12px);
   animation: pulse-glow 3s infinite alternate;
@@ -299,7 +330,7 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #10b981;
+  color: #FC950B;
   font-size: 1.85rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
@@ -314,7 +345,7 @@ input {
 }
 
 .brand-title-accent {
-  background: linear-gradient(135deg, #2563eb, #10b981);
+  background: linear-gradient(135deg, #FC950B, #FFB020);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-weight: 900;
