@@ -372,12 +372,34 @@ secao */
 
     // Iniciar rastreamento de localização GPS
     startDelivererLocationTracking();
+
+    // Carregar POIs imediatamente com o centro atual (antes do GPS confirmar)
+    // Isso evita espera caso o GPS demore
+    setTimeout(() => {
+      if (!hasCenteredOnUser) {
+        loadMapNearbyPOIs(currentCoords.lat, currentCoords.lng);
+      }
+    }, 1500);
   }
 
   let hasCenteredOnUser = false;
 
   function startDelivererLocationTracking() {
     if ('geolocation' in navigator) {
+      // Primeiro tenta obter posição imediata (getCurrentPosition) para ter POIs rápidos
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          updateDelivererLocation(lat, lng);
+        },
+        (err) => {
+          console.warn('GPS getCurrentPosition falhou:', err.message);
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+      );
+
+      // watchPosition para atualizações contínuas
       watchPositionId = navigator.geolocation.watchPosition(
         (pos) => {
           const lat = pos.coords.latitude;
@@ -388,7 +410,7 @@ secao */
           console.warn('GPS indisponivel ou permissao pendente. Usando localizacao base:', err.message);
           updateDelivererLocation(MAP_CENTER[0], MAP_CENTER[1]);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 1000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
       );
     }
   }
@@ -403,8 +425,8 @@ secao */
       if (!hasCenteredOnUser) {
         mapInstance.setView([lat, lng], 16);
         hasCenteredOnUser = true;
-        // Carrega automaticamente os emojis de postos e borracharias no mapa
-        loadMapNearbyPOIs(lat, lng);
+        // Carrega POIs reais com a coordenada GPS confirmada (com force=true para substituir qualquer prévia)
+        loadMapNearbyPOIs(lat, lng, true);
       }
     }
 
@@ -547,6 +569,10 @@ secao */
       emoji = '🛞';
       bg = 'linear-gradient(135deg, #ea580c, #c2410c)'; // Borracharia (laranja/âmbar)
       shadow = 'rgba(234, 88, 12, 0.5)';
+    } else if (type === 'motorcycle') {
+      emoji = '🏍️';
+      bg = 'linear-gradient(135deg, #0d9488, #0f766e)'; // Oficina de moto (verde-azulado)
+      shadow = 'rgba(13, 148, 136, 0.5)';
     }
 
     return L.divIcon({
@@ -576,34 +602,90 @@ secao */
     });
   }
 
-  async function fetchOverpassNearbyPOIs(lat, lng, radius) {
-    const query = `
-      [out:json][timeout:5];
-      (
-        node["shop"~"car_repair|tyres|motorcycle_repair"](around:${radius},${lat},${lng});
-        node["amenity"="fuel"](around:${radius},${lat},${lng});
-        way["shop"~"car_repair|tyres|motorcycle_repair"](around:${radius},${lat},${lng});
-      );
-      out center 20;
-    `;
-    const url = 'https://overpass-api.de/api/interpreter';
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4500);
+  // Servidores espelho Overpass para fallback de rede
+  const OVERPASS_SERVERS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+  ];
 
-    try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        body: 'data=' + encodeURIComponent(query),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      if (!resp.ok) throw new Error('Overpass indisponível');
-      const json = await resp.json();
-      return json.elements || [];
-    } catch (err) {
-      clearTimeout(timeoutId);
-      throw err;
+  async function fetchOverpassNearbyPOIs(lat, lng, radius) {
+    // Query ampliada: postos de combustível, borracharias, mecânicas de moto e carro, auto peças
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["amenity"="fuel"](around:${radius},${lat},${lng});
+        way["amenity"="fuel"](around:${radius},${lat},${lng});
+        node["shop"~"^(tyres|car_repair|motorcycle_repair|car_parts|auto_parts|workshop)$"](around:${radius},${lat},${lng});
+        way["shop"~"^(tyres|car_repair|motorcycle_repair|car_parts|auto_parts|workshop)$"](around:${radius},${lat},${lng});
+        node["craft"~"^(tyre_fitting|car_repair|motorcycle_repair)$"](around:${radius},${lat},${lng});
+      );
+      out center 30;
+    `;
+
+    let lastErr = null;
+
+    for (const serverUrl of OVERPASS_SERVERS) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos por servidor
+      try {
+        const resp = await fetch(serverUrl, {
+          method: 'POST',
+          body: 'data=' + encodeURIComponent(query),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} em ${serverUrl}`);
+        const json = await resp.json();
+        const elements = json.elements || [];
+        if (elements.length > 0) {
+          console.log(`✅ Overpass OK via ${serverUrl}: ${elements.length} resultados`);
+          return elements;
+        }
+        // Servidor respondeu mas sem resultados, tenta o próximo
+        lastErr = new Error('Nenhum resultado retornado');
+      } catch (err) {
+        clearTimeout(timeoutId);
+        lastErr = err;
+        console.warn(`⚠️ Overpass falhou em ${serverUrl}:`, err.message);
+      }
+    }
+
+    throw lastErr || new Error('Todos os servidores Overpass falharam');
+  }
+
+  function showPoiLoadingIndicator(show) {
+    // Indicador visual no mapa enquanto busca POIs
+    let indicator = document.getElementById('poi-loading-indicator');
+    if (show) {
+      if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'poi-loading-indicator';
+        indicator.style.cssText = [
+          'position:absolute', 'bottom:80px', 'left:50%', 'transform:translateX(-50%)',
+          'background:rgba(15,23,42,0.88)', 'color:#fff', 'padding:7px 16px',
+          'border-radius:20px', 'font-size:0.72rem', 'font-weight:600',
+          'z-index:900', 'display:flex', 'align-items:center', 'gap:7px',
+          'backdrop-filter:blur(8px)', 'box-shadow:0 2px 12px rgba(0,0,0,0.3)',
+          'pointer-events:none', 'white-space:nowrap'
+        ].join(';');
+        indicator.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border:2px solid #38bdf8;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite"></span> Buscando postos e borracharias (5 km)...';
+        // Garante que o estilo de animação existe
+        if (!document.getElementById('poi-spin-style')) {
+          const s = document.createElement('style');
+          s.id = 'poi-spin-style';
+          s.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+          document.head.appendChild(s);
+        }
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.style.position = 'relative';
+        const mapParent = document.getElementById('map') || document.body;
+        mapParent.appendChild(indicator);
+      }
+      indicator.style.display = 'flex';
+    } else {
+      if (indicator) indicator.style.display = 'none';
     }
   }
 
@@ -615,30 +697,51 @@ secao */
     }
 
     const now = Date.now();
-    // Evitar requisições repetidas se não passou 30s ou se moveu pouco
-    if (!force && lastPoiCenter && (now - lastPoiFetchTime < 30000)) {
+    // Evitar requisições repetidas se não passou 60s e moveu menos de 500m
+    if (!force && lastPoiCenter && (now - lastPoiFetchTime < 60000)) {
       const dist = haversineDistanceKm(lat, lng, lastPoiCenter.lat, lastPoiCenter.lng);
-      if (dist < 0.6) return;
+      if (dist < 0.5) return;
     }
 
     lastPoiFetchTime = now;
     lastPoiCenter = { lat, lng };
 
+    showPoiLoadingIndicator(true);
+
     try {
-      const elements = await fetchOverpassNearbyPOIs(lat, lng, 3500); // 3.5 km
+      const elements = await fetchOverpassNearbyPOIs(lat, lng, 5000); // 5 km
       const places = elements
-        .filter(el => el.tags && (el.tags.name || el.tags.shop || el.tags.amenity))
+        .filter(el => el.tags)
         .map(el => {
-          const elLat = el.lat || el.center?.lat || lat;
-          const elLng = el.lon || el.center?.lon || lng;
-          const shop = el.tags.shop || el.tags.amenity || '';
+          const elLat = el.lat || el.center?.lat;
+          const elLng = el.lon || el.center?.lon;
+          if (!elLat || !elLng) return null;
+
+          const amenity = el.tags.amenity || '';
+          const shop = el.tags.shop || '';
+          const craft = el.tags.craft || '';
           let type = 'car_repair';
-          if (shop === 'fuel' || el.tags.amenity === 'fuel') type = 'fuel';
-          else if (shop === 'tyres') type = 'tyres';
+
+          if (amenity === 'fuel') {
+            type = 'fuel';
+          } else if (shop === 'tyres' || craft === 'tyre_fitting') {
+            type = 'tyres';
+          } else if (
+            shop === 'motorcycle_repair' ||
+            craft === 'motorcycle_repair'
+          ) {
+            type = 'motorcycle';
+          }
 
           const distKm = haversineDistanceKm(lat, lng, elLat, elLng);
+          const defaultName =
+            type === 'fuel' ? 'Posto de Combustível' :
+            type === 'tyres' ? 'Borracharia' :
+            type === 'motorcycle' ? 'Oficina de Moto' :
+            'Mecânica / Auto Peças';
+
           return {
-            name: el.tags.name || el.tags['name:pt'] || (type === 'fuel' ? 'Posto de Combustível' : type === 'tyres' ? 'Borracharia' : 'Oficina Mecânica'),
+            name: el.tags.name || el.tags['name:pt'] || defaultName,
             address: [el.tags['addr:street'], el.tags['addr:housenumber']].filter(Boolean).join(', ') || 'Próximo à sua localização',
             phone: el.tags.phone || el.tags['contact:phone'] || el.tags['contact:mobile'] || '',
             type,
@@ -647,57 +750,25 @@ secao */
             distKm
           };
         })
-        .filter(p => p.distKm <= 4.5)
+        .filter(p => p && p.distKm <= 5.0)
         .sort((a, b) => a.distKm - b.distKm)
-        .slice(0, 10); // Máximo 10 pins para mapa limpo e rápido
+        .slice(0, 15); // Máximo 15 pins
+
+      showPoiLoadingIndicator(false);
 
       if (places.length === 0) {
-        throw new Error('Sem POIs próximos na região via Overpass');
+        console.warn('Overpass retornou resultados mas nenhum válido na área de 5 km.');
+        showToast('⛽ Nenhum posto ou borracharia encontrado em 5 km.', 'info');
+        return;
       }
 
       renderPoiMarkers(places);
+      showToast(`⛽ ${places.length} locais encontrados em até 5 km`, 'success');
     } catch (err) {
-      console.warn('Overpass POIs fallback local:', err.message);
-      // Fallback local realista em torno do entregador
-      const fallbackPois = [
-        {
-          name: 'Posto de Combustível 24h',
-          address: 'Avenida Principal',
-          phone: '11933332222',
-          type: 'fuel',
-          lat: lat + 0.005,
-          lng: lng - 0.004,
-          distKm: 0.6
-        },
-        {
-          name: 'Borracharia & Pneus Socorro',
-          address: 'Rua das Oficinas, 42',
-          phone: '11944445555',
-          type: 'tyres',
-          lat: lat - 0.004,
-          lng: lng + 0.006,
-          distKm: 0.8
-        },
-        {
-          name: 'Mecânica & Auto Peças Moto Express',
-          address: 'Avenida Central, 120',
-          phone: '11977778888',
-          type: 'car_repair',
-          lat: lat + 0.008,
-          lng: lng + 0.005,
-          distKm: 1.1
-        },
-        {
-          name: 'Auto Posto Shell / Ipiranga',
-          address: 'Via de Acesso Rápido',
-          phone: '11988881111',
-          type: 'fuel',
-          lat: lat - 0.007,
-          lng: lng - 0.006,
-          distKm: 1.3
-        }
-      ];
-      renderPoiMarkers(fallbackPois);
+      showPoiLoadingIndicator(false);
+      console.warn('Overpass POIs falhou em todos os servidores:', err.message);
+      showToast('⚠️ Não foi possível buscar postos em tempo real. Verifique sua conexão.', 'info');
+      // Sem fallback simulado: se não há dados reais, não exibe pinos falsos
     }
   }
 
@@ -709,8 +780,8 @@ secao */
       const icon = getPoiEmojiIcon(item.type);
       const marker = L.marker([item.lat, item.lng], { icon });
 
-      const emoji = item.type === 'fuel' ? '⛽' : item.type === 'tyres' ? '🛞' : '🔧';
-      const typeLabel = item.type === 'fuel' ? 'Posto de Gasolina' : item.type === 'tyres' ? 'Borracharia' : 'Oficina Mecânica';
+      const emoji = item.type === 'fuel' ? '⛽' : item.type === 'tyres' ? '🛞' : item.type === 'motorcycle' ? '🏍️' : '🔧';
+      const typeLabel = item.type === 'fuel' ? 'Posto de Gasolina' : item.type === 'tyres' ? 'Borracharia' : item.type === 'motorcycle' ? 'Oficina de Moto' : 'Oficina Mecânica';
       const distLabel = item.distKm < 1 ? `${Math.round(item.distKm * 1000)} m` : `${item.distKm.toFixed(1)} km`;
       const cleanPhone = (item.phone || '').replace(/\D/g, '');
 
