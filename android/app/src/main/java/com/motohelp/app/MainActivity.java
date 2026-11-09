@@ -1,4 +1,4 @@
-package com.rotarapida.app;
+package com.motohelp.app;
 
 import android.content.Intent;
 import android.net.Uri;
@@ -30,7 +30,7 @@ public class MainActivity extends BridgeActivity {
     private void handleIntent(Intent intent) {
         if (intent == null) return;
         Uri data = intent.getData();
-        if (data != null && "appentrega".equalsIgnoreCase(data.getScheme())) {
+        if (data != null && ("appentrega".equalsIgnoreCase(data.getScheme()) || "motohelp".equalsIgnoreCase(data.getScheme()))) {
             final String url = data.toString();
             if (this.bridge != null && this.bridge.getWebView() != null) {
                 this.bridge.getWebView().post(new Runnable() {
@@ -64,3 +64,4 @@ public class MainActivity extends BridgeActivity {
         }
     }
 }
+

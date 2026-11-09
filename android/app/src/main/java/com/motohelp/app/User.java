@@ -1,4 +1,4 @@
-package com.rotarapida.app;
+package com.motohelp.app;
 
 public class User {
     public int id;
@@ -8,3 +8,4 @@ public class User {
     public String plate;
     public String type;
 }
+

@@ -1,4 +1,4 @@
-package com.rotarapida.app;
+package com.motohelp.app;
 
 import android.content.Context;
 import android.webkit.JavascriptInterface;
@@ -67,3 +67,4 @@ public class DatabaseBridge {
         }
     }
 }
+

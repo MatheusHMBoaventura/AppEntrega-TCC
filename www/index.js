@@ -3332,7 +3332,7 @@ secao */
     
     dom.chatMessagesContainer.innerHTML = `
       <div class="chat-bubble received">
-        Olá, ${AppState.activeUser ? AppState.activeUser.name : 'visitante'}! Sou o assistente virtual da AppEntrega. Como posso te ajudar com o tema <strong>${subject}</strong> hoje?
+        Olá, ${AppState.activeUser ? AppState.activeUser.name : 'visitante'}! Sou o assistente virtual da MotoHelp. Como posso te ajudar com o tema <strong>${subject}</strong> hoje?
         <span class="bubble-time">Agora mesmo</span>
       </div>
     `;

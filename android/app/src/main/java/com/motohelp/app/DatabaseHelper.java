@@ -1,4 +1,4 @@
-package com.rotarapida.app;
+package com.motohelp.app;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -10,7 +10,7 @@ import java.security.NoSuchAlgorithmException;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
 
-    private static final String DATABASE_NAME = "rotarapida.db";
+    private static final String DATABASE_NAME = "motohelp.db";
     private static final int DATABASE_VERSION = 1;
 
     // Tabela de usuários
@@ -49,11 +49,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         onCreate(db);
     }
 
-    // Hash SHA-256 para salvar senhas de forma segura
-    private String hashPassword(String password) {
+    // Hash criptográfico SHA-256 seguro (§7.5 - Nenhuma senha armazenada ou comparada em texto puro)
+    public static String hashPassword(String password) {
+        if (password == null) return "";
+        String trimmed = password.trim();
+        // Se já for um hash hexadecimal de 64 caracteres, mantém
+        if (trimmed.matches("^[a-fA-F0-9]{64}$")) {
+            return trimmed.toLowerCase();
+        }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(password.getBytes());
+            byte[] hash = digest.digest(trimmed.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
                 String hex = Integer.toHexString(0xff & b);
@@ -62,8 +68,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             }
             return hexString.toString();
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return password; // Fallback para texto simples se o algoritmo falhar (improvável)
+            throw new RuntimeException("Erro ao gerar hash SHA-256 da senha", e);
         }
     }
 
@@ -81,7 +86,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    // Adiciona um novo usuário
+    // Adiciona um novo usuário sempre com senha hasheada com SHA-256
     public long addUser(String name, String email, String phone, String plate, String password, String type) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -95,8 +100,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return db.insert(TABLE_USERS, null, values);
     }
 
-    // Busca um usuário válido pelas credenciais e tipo de conta
+    // Busca um usuário válido pelas credenciais e tipo de conta usando hash SHA-256
     public User getUser(String email, String password, String type) {
+        if (email == null || password == null || type == null) return null;
         SQLiteDatabase db = this.getReadableDatabase();
         String hashedPassword = hashPassword(password);
         Cursor cursor = null;
@@ -106,6 +112,22 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     KEY_EMAIL + "=? AND " + KEY_PASSWORD + "=? AND " + KEY_TYPE + "=?",
                     new String[]{email.trim().toLowerCase(), hashedPassword, type.trim().toLowerCase()},
                     null, null, null);
+
+            // Migração transparente de senhas legadas que ainda estejam em texto puro
+            if ((cursor == null || !cursor.moveToFirst())) {
+                if (cursor != null) cursor.close();
+                cursor = db.query(TABLE_USERS,
+                        new String[]{KEY_ID, KEY_NAME, KEY_EMAIL, KEY_PHONE, KEY_PLATE, KEY_TYPE},
+                        KEY_EMAIL + "=? AND " + KEY_PASSWORD + "=? AND " + KEY_TYPE + "=?",
+                        new String[]{email.trim().toLowerCase(), password.trim(), type.trim().toLowerCase()},
+                        null, null, null);
+                if (cursor != null && cursor.moveToFirst()) {
+                    SQLiteDatabase writableDb = this.getWritableDatabase();
+                    ContentValues cv = new ContentValues();
+                    cv.put(KEY_PASSWORD, hashedPassword);
+                    writableDb.update(TABLE_USERS, cv, KEY_EMAIL + "=?", new String[]{email.trim().toLowerCase()});
+                }
+            }
 
             if (cursor != null && cursor.moveToFirst()) {
                 User user = new User();
@@ -123,3 +145,4 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return null;
     }
 }
+

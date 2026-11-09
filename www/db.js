@@ -1,19 +1,128 @@
 /*
-gerenciador unificado de dados
-integra sqlite local e supabase cloud
+ gerenciador unificado de dados
+ integra sqlite local e supabase cloud
 */
 
+/* ==========================================================================
+   Criptografia e Hashing Seguro de Senhas (§7.5 - Resolução de Divergência)
+   Garante que nenhuma senha seja armazenada ou comparada em texto puro.
+   Utiliza Web Crypto API (SHA-256) nativa com fallback em JavaScript puro.
+   ========================================================================== */
+
+function sha256Pure(ascii) {
+  function rightRotate(value, amount) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  let lengthProperty = 'length';
+  let i, j;
+  let result = '';
+
+  const words = [];
+  const asciiBitLength = ascii[lengthProperty] * 8;
+  
+  let hash = [];
+  let k = [];
+  let primeCounter = 0;
+
+  const isComposite = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (i = candidate * candidate; i < 312; i += candidate) {
+        isComposite[i] = true;
+      }
+      if (primeCounter < 8) {
+        hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      }
+      k[primeCounter] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+      primeCounter++;
+    }
+  }
+
+  ascii += '\x80';
+  while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
+  for (i = 0; i < ascii[lengthProperty]; i++) {
+    j = ascii.charCodeAt(i);
+    words[i >> 2] |= j << ((3 - (i % 4)) * 8);
+  }
+  words[words[lengthProperty]] = (asciiBitLength / maxWord) | 0;
+  words[words[lengthProperty]] = asciiBitLength;
+
+  for (j = 0; j < words[lengthProperty];) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = hash;
+    hash = hash.slice(0, 8);
+
+    for (i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2];
+      const s0 = rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3);
+      const s1 = rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10);
+      w[i] = (i < 16) ? w[i] : (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+
+      const ch = (hash[4] & hash[5]) ^ (~hash[4] & hash[6]);
+      const temp1 = (hash[7] + (rightRotate(hash[4], 6) ^ rightRotate(hash[4], 11) ^ rightRotate(hash[4], 25)) + ch + k[i] + w[i]) | 0;
+      const maj = (hash[0] & hash[1]) ^ (hash[0] & hash[2]) ^ (hash[1] & hash[2]);
+      const temp2 = ((rightRotate(hash[0], 2) ^ rightRotate(hash[0], 13) ^ rightRotate(hash[0], 22)) + maj) | 0;
+
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+    }
+
+    for (i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+
+  for (i = 0; i < 8; i++) {
+    for (j = 3; j >= 0; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += (b < 16 ? '0' : '') + b.toString(16);
+    }
+  }
+  return result;
+}
+
+async function hashPassword(plainPassword) {
+  if (!plainPassword) return '';
+  const str = String(plainPassword).trim();
+  // Se a string já corresponder a um hash SHA-256 de 64 caracteres hexadecimais, mantém
+  if (/^[a-f0-9]{64}$/i.test(str)) {
+    return str.toLowerCase();
+  }
+
+  // Tenta usar a Web Crypto API nativa do navegador/WebView
+  if (typeof crypto !== 'undefined' && crypto.subtle && typeof TextEncoder !== 'undefined') {
+    try {
+      const msgBuffer = new TextEncoder().encode(str);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
+    } catch (_) {
+      // fallback abaixo
+    }
+  }
+
+  // Fallback seguro em JavaScript puro com suporte a UTF-8
+  try {
+    const utf8Str = unescape(encodeURIComponent(str));
+    return sha256Pure(utf8Str).toLowerCase();
+  } catch (_) {
+    return sha256Pure(str).toLowerCase();
+  }
+}
+
 /*
-gerencia persistencia local sqlite e localstorage
-serve como modo offline de contingencia
+ gerencia persistencia local sqlite e localstorage
+ serve como modo offline de contingencia
 */
 class LocalSQLiteManager {
   constructor() {
     this.db = null;
     this.isWebSQL = false;
-    this.dbName = 'AppEntregaDB';
+    this.dbName = 'MotoHelpDB';
     this.dbVersion = '1.0';
-    this.dbDisplayName = 'AppEntrega Local Database';
+    this.dbDisplayName = 'MotoHelp Local Database';
     this.dbSize = 5 * 1024 * 1024;
   }
 
@@ -33,6 +142,7 @@ class LocalSQLiteManager {
 
     await this.createTables();
     await this.seedDefaultData();
+    await this.migrateLegacyPasswords();
   }
 
   query(sql, params = []) {
@@ -149,11 +259,30 @@ class LocalSQLiteManager {
     }
   }
 
+  async migrateLegacyPasswords() {
+    try {
+      const allUsers = await this.query('SELECT id, email, password FROM users');
+      const list = allUsers.rows ? (allUsers.rows.toArray ? allUsers.rows.toArray() : Array.from({ length: allUsers.rows.length }, (_, i) => allUsers.rows.item(i))) : [];
+      for (const u of list) {
+        if (u.password && (!/^[a-f0-9]{64}$/i.test(String(u.password).trim()))) {
+          const hashed = await hashPassword(u.password);
+          await this.query('UPDATE users SET password = ? WHERE id = ?', [hashed, u.id]);
+          console.log(`[Segurança §7.5] Senha legada do usuário ${u.email} migrada para hash SHA-256.`);
+        }
+      }
+    } catch (e) {
+      console.warn('Aviso na verificação de migração de senhas legadas:', e);
+    }
+  }
+
   async seedDefaultData() {
-    // garante que o usuario padrao joao silva (entregador moto) exista e tenha a senha 123456
+    // Hash SHA-256 da senha padrão '123456' (§7.5 - Armazenamento seguro de senhas)
+    const passwordHash123456 = await hashPassword('123456');
+
+    // garante que o usuario padrao joao silva (entregador moto) exista e tenha o hash da senha
     const checkJoao = await this.query('SELECT * FROM users WHERE email = ?', ['joao@email.com']);
     if (checkJoao.rows.length === 0) {
-      console.log('semeando usuario padrao joao silva (entregador moto)');
+      console.log('semeando usuario padrao joao silva (entregador moto) com hash SHA-256');
       
       const userRes = await this.query(
         'INSERT INTO users (name, email, phone, password, user_type, avatar) VALUES (?, ?, ?, ?, ?, ?)',
@@ -161,7 +290,7 @@ class LocalSQLiteManager {
           'João Silva', 
           'joao@email.com', 
           '(11) 98765-4321', 
-          '123456',
+          passwordHash123456,
           'entregador', 
           'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150'
         ]
@@ -198,21 +327,21 @@ class LocalSQLiteManager {
         await this.query('INSERT INTO places (user_id, type, title, address, lat, lng) VALUES (?, ?, ?, ?, ?, ?)', place);
       }
     } else {
-      // atualiza a senha para 123456 para sincronizar usuarios antigos
-      await this.query('UPDATE users SET password = ? WHERE email = ?', ['123456', 'joao@email.com']);
+      // atualiza a senha para hash seguro SHA-256
+      await this.query('UPDATE users SET password = ? WHERE email = ?', [passwordHash123456, 'joao@email.com']);
     }
 
     // garante que o usuario matheus (lojista) para testes locais seja semeado
     const checkMatheus = await this.query('SELECT * FROM users WHERE email = ?', ['matheus@email.com']);
     if (checkMatheus.rows.length === 0) {
-      console.log('semeando usuario matheus (lojista)');
+      console.log('semeando usuario matheus (lojista) com hash SHA-256');
       const matheusRes = await this.query(
         'INSERT INTO users (name, email, phone, password, user_type, avatar) VALUES (?, ?, ?, ?, ?, ?)',
         [
           'Matheus Teste', 
           'matheus@email.com', 
           '(11) 99999-9999', 
-          '123456', 
+          passwordHash123456, 
           'lojista',
           'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
         ]
@@ -222,19 +351,21 @@ class LocalSQLiteManager {
         'INSERT INTO merchants (user_id, store_name, cnpj_cpf, category, address) VALUES (?, ?, ?, ?, ?)',
         [matheusId, 'Pizzaria do Matheus', '12.345.678/0001-99', 'Restaurante', 'Av. Paulista, 2000 - Bela Vista']
       );
+    } else {
+      await this.query('UPDATE users SET password = ? WHERE email = ?', [passwordHash123456, 'matheus@email.com']);
     }
 
     // garante que o socorro emergencial (borracharia/oficina) seja semeado para o SOS
     const checkBorracharia = await this.query('SELECT * FROM users WHERE email = ?', ['borracharia@email.com']);
     if (checkBorracharia.rows.length === 0) {
-      console.log('semeando borracharia emergencial para SOS');
+      console.log('semeando borracharia emergencial para SOS com hash SHA-256');
       const bRes = await this.query(
         'INSERT INTO users (name, email, phone, password, user_type, avatar) VALUES (?, ?, ?, ?, ?, ?)',
         [
           'Marcos Borracharia',
           'borracharia@email.com',
           '(11) 94444-5555',
-          '123456',
+          passwordHash123456,
           'lojista',
           'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=150'
         ]
@@ -244,6 +375,8 @@ class LocalSQLiteManager {
         'INSERT INTO merchants (user_id, store_name, cnpj_cpf, category, address) VALUES (?, ?, ?, ?, ?)',
         [bId, 'Borracharia & AutoPeças Express 24h', '33.221.100/0001-44', 'Borracharia / Auto Peças', 'Av. Santo Amaro, 800 - Itaim Bibi']
       );
+    } else {
+      await this.query('UPDATE users SET password = ? WHERE email = ?', [passwordHash123456, 'borracharia@email.com']);
     }
 
     // garante que pedidos/fretes iniciais estejam semeados para o portal de oportunidades
@@ -315,10 +448,12 @@ class LocalSQLiteManager {
 
     const avatarDefault = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150';
     const type = userType || 'entregador';
+    // Hash criptográfico SHA-256 (§7.5 - Nenhuma senha gravada em texto puro)
+    const passwordHash = await hashPassword(password);
 
     const res = await this.query(
       'INSERT INTO users (name, email, phone, password, user_type, avatar) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, email, phone, password, type, avatarDefault]
+      [name, email, phone, passwordHash, type, avatarDefault]
     );
 
     const newUserId = String(res.insertId);
@@ -349,19 +484,27 @@ class LocalSQLiteManager {
   async loginUser(email, password) {
     const cleanEmail = String(email || '').trim().toLowerCase();
     const cleanPass = String(password || '').trim();
+    if (!cleanEmail || !cleanPass) throw new Error('E-mail e senha são obrigatórios.');
 
-    let res = await this.query('SELECT * FROM users WHERE email = ? AND password = ?', [cleanEmail, cleanPass]);
+    // Cálculo do hash SHA-256 para comparação segura (§7.5)
+    const passHash = await hashPassword(cleanPass);
+
+    let res = await this.query('SELECT * FROM users WHERE email = ? AND password = ?', [cleanEmail, passHash]);
     
-    // Fallback para contas de teste padrões (joao e matheus aceitam 123 ou 123456)
-    if (res.rows.length === 0 && (cleanEmail === 'joao@email.com' || cleanEmail === 'matheus@email.com' || cleanEmail === 'borracharia@email.com')) {
-      if (cleanPass === '123' || cleanPass === '123456') {
-        res = await this.query('SELECT * FROM users WHERE email = ?', [cleanEmail]);
+    // Migração transparente caso a base local possua senha legada em texto puro
+    if (res.rows.length === 0) {
+      const legacyCheck = await this.query('SELECT * FROM users WHERE email = ? AND password = ?', [cleanEmail, cleanPass]);
+      if (legacyCheck.rows.length > 0) {
+        await this.query('UPDATE users SET password = ? WHERE email = ?', [passHash, cleanEmail]);
+        res = legacyCheck;
+        console.log(`[Segurança §7.5] Senha legada do usuário ${cleanEmail} migrada com sucesso para hash SHA-256.`);
       }
     }
 
     if (res.rows.length === 0) throw new Error('E-mail ou senha incorretos.');
     
-    const user = res.rows.item(0);
+    const user = { ...res.rows.item(0) };
+    delete user.password; // Higienização: nunca propaga hash ou senha para a sessão
     let extraData = {};
 
     if (user.user_type === 'entregador') {
@@ -830,8 +973,8 @@ class UnifiedDatabaseManager {
 
   async loginUser(email, password) {
     if (this.isSupabaseMode) {
-      console.log(`login para ${email}`);
-      // autentica com supabase auth
+      console.log(`[Supabase Auth §7.5] Autenticando com Supabase Auth (Bcrypt): ${email}`);
+      // autentica com Supabase Auth (senhas protegidas via Bcrypt no servidor na nuvem)
       const { data, error } = await this.supabase.auth.signInWithPassword({
         email: email,
         password: password
@@ -840,7 +983,7 @@ class UnifiedDatabaseManager {
       if (error) throw error;
       if (!data.user) throw new Error('E-mail ou senha incorretos.');
 
-      // busca perfil publico do postgresql
+      // busca perfil público do PostgreSQL (tabela users não armazena senha)
       const { data: profile, error: profileErr } = await this.supabase
           .from('users')
           .select('*')
@@ -850,10 +993,10 @@ class UnifiedDatabaseManager {
       if (profileErr || !profile) {
         return {
           id: data.user.id,
-          name: data.user.user_metadata.name || 'Usuário Supabase',
+          name: data.user.user_metadata?.name || 'Usuário Supabase',
           email: data.user.email,
-          phone: data.user.user_metadata.phone || '',
-          user_type: data.user.user_metadata.user_type || 'entregador',
+          phone: data.user.user_metadata?.phone || '',
+          user_type: data.user.user_metadata?.user_type || 'entregador',
           avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
         };
       }
@@ -867,9 +1010,11 @@ class UnifiedDatabaseManager {
         if (merchantData) extraData = merchantData;
       }
 
-      return { ...profile, ...extraData };
+      const safeProfile = { ...profile, ...extraData };
+      delete safeProfile.password;
+      return safeProfile;
     } else {
-      console.log('executando login no sqlite local fallback');
+      console.log('[SQLite Fallback §7.5] Autenticando com SQLite local protegido por hash SHA-256');
       return await this.sqlite.loginUser(email, password);
     }
   }

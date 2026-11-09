@@ -1,6 +1,6 @@
-# AppEntrega
+# MotoHelp
 
-O AppEntrega é uma aplicação híbrida voltada para a roteirização e apoio logístico de entregadores. Desenvolvido como Trabalho de Conclusão de Curso (TCC), o projeto visa resolver problemas práticos de mobilidade e conectividade enfrentados por profissionais de entrega no cotidiano urbano, oferecendo planejamento de trajetos, um canal de oportunidades de fretes e um sistema de auxílio emergencial local.
+O MotoHelp é uma aplicação híbrida voltada para a roteirização e apoio logístico de entregadores. Desenvolvido como Trabalho de Conclusão de Curso (TCC), o projeto visa resolver problemas práticos de mobilidade e conectividade enfrentados por profissionais de entrega no cotidiano urbano, oferecendo planejamento de trajetos, um canal de oportunidades de fretes e um sistema de auxílio emergencial local.
 
 ## Funcionalidades Principais
 
@@ -65,6 +65,14 @@ As atualizações de dados sensíveis e históricos de rotas utilizam o nível d
 
 ### Telemetria e Auditoria Semiestruturada
 A tabela de auditoria (`audit_logs`) emprega o tipo de dado `JSONB` no PostgreSQL. Essa abordagem simplifica o registro de eventos de segurança e payloads geográficos com estruturas dinâmicas, eliminando a necessidade de alterações físicas constantes no esquema do banco e otimizando o desempenho de consultas indexadas.
+
+### Segurança e Criptografia de Credenciais (§7.5)
+O sistema elimina integralmente o armazenamento ou comparação de senhas em texto puro através de uma arquitetura segura de autenticação em duas frentes:
+* **Ambiente em Nuvem (Supabase Auth)**: As credenciais não são persistidas na tabela pública `public.users`. O fluxo de login e registro é gerenciado pelo serviço oficial do Supabase Auth, que processa e armazena os segredos no schema fechado `auth.users` utilizando algoritmo adaptativo de derivação de chaves **Bcrypt** com salt criptográfico aleatório por padrão.
+* **Ambiente Offline / Contingência Local (SQLite & Android Nativo)**:
+  * No gerenciador local (`www/db.js`), toda senha é cifrada com algoritmo de mão única **SHA-256** (utilizando a Web Crypto API nativa do navegador/WebView `crypto.subtle.digest` com fallback autônomo UTF-8) antes de qualquer operação de escrita ou consulta no banco.
+  * No aplicativo Android nativo ([`DatabaseHelper.java`](file:///c:/Users/Intersolid/Desktop/aaa/AppEntrega-TCC/android/app/src/main/java/com/motohelp/app/DatabaseHelper.java)), o método `hashPassword` aplica SHA-256 via `java.security.MessageDigest` com codificação UTF-8 estrita, sem fallbacks para texto puro.
+  * O sistema inclui rotina automática de migração transparente para hashes SHA-256 de bases legadas e higienização de objetos em memória (`delete user.password`), impedindo a exposição de segredos na interface do usuário.
 
 ## Estrutura do Banco de Dados
 

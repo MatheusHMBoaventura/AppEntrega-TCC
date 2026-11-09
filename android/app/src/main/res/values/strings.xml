@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">MotoHelp</string>
     <string name="title_activity_main">MotoHelp</string>
-    <string name="package_name">com.rotarapida.app</string>
-    <string name="custom_url_scheme">com.rotarapida.app</string>
+    <string name="package_name">com.motohelp.app</string>
+    <string name="custom_url_scheme">com.motohelp.app</string>
 </resources>

@@ -48,7 +48,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log('');
   console.log('  ================================');
-  console.log('   AppEntrega - Servidor Local');
+  console.log('   MotoHelp - Servidor Local');
   console.log('  ================================');
   console.log('  URL: http://localhost:' + PORT);
   console.log('  Pasta: ' + WWW_DIR);

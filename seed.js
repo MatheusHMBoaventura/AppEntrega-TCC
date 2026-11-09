@@ -1,10 +1,18 @@
 /*
- * Script Seeder para testes de Endpoints e Banco de Dados (AppEntrega-TCC)
+ * Script Seeder para testes de Endpoints e Banco de Dados (MotoHelp - TCC)
  * Uso: node seed.js
+ * (§7.5 - Hashing criptográfico de senhas: sem armazenamento em texto puro)
  */
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+function hashPassword(str) {
+  return crypto.createHash('sha256').update(String(str)).digest('hex');
+}
+
+const DEFAULT_HASH = hashPassword('123456');
 
 const SEED_DATA = {
   entregadores: [
@@ -12,7 +20,7 @@ const SEED_DATA = {
       id: 'e3b0c442-98fc-11ee-b9d1-0242ac120001',
       name: 'João Silva',
       email: 'joao.entregador@email.com',
-      password: '123',
+      password_hash: DEFAULT_HASH,
       phone: '(11) 98765-4321',
       user_type: 'entregador',
       cpf: '123.456.789-00',
@@ -26,7 +34,7 @@ const SEED_DATA = {
       id: 'e3b0c442-98fc-11ee-b9d1-0242ac120002',
       name: 'Carlos Eduardo',
       email: 'carlos.moto@email.com',
-      password: '123',
+      password_hash: DEFAULT_HASH,
       phone: '(11) 97777-1111',
       user_type: 'entregador',
       cpf: '987.654.321-11',
@@ -40,7 +48,7 @@ const SEED_DATA = {
       id: 'e3b0c442-98fc-11ee-b9d1-0242ac120003',
       name: 'Lucas Mendes',
       email: 'lucas.entregas@email.com',
-      password: '123',
+      password_hash: DEFAULT_HASH,
       phone: '(11) 96666-2222',
       user_type: 'entregador',
       cpf: '456.789.123-22',
@@ -56,7 +64,7 @@ const SEED_DATA = {
       id: 'f4b1d553-99fd-11ee-b9d1-0242ac120001',
       name: 'Matheus Oliveira',
       email: 'pizzaria@email.com',
-      password: '123',
+      password_hash: DEFAULT_HASH,
       phone: '(11) 99999-9999',
       user_type: 'lojista',
       store_name: 'Pizzaria do Matheus',
@@ -69,7 +77,7 @@ const SEED_DATA = {
       id: 'f4b1d553-99fd-11ee-b9d1-0242ac120002',
       name: 'Fernanda Lima',
       email: 'burgershop@email.com',
-      password: '123',
+      password_hash: DEFAULT_HASH,
       phone: '(11) 98888-3333',
       user_type: 'lojista',
       store_name: 'Burger Express',
@@ -82,7 +90,7 @@ const SEED_DATA = {
       id: 'f4b1d553-99fd-11ee-b9d1-0242ac120003',
       name: 'Roberto Alves',
       email: 'farmacia.central@email.com',
-      password: '123',
+      password_hash: DEFAULT_HASH,
       phone: '(11) 95555-4444',
       user_type: 'lojista',
       store_name: 'Farmácia Central 24h',
@@ -95,7 +103,7 @@ const SEED_DATA = {
       id: 'f4b1d553-99fd-11ee-b9d1-0242ac120004',
       name: 'Marcos Souza',
       email: 'borracharia.rapida@email.com',
-      password: '123',
+      password_hash: DEFAULT_HASH,
       phone: '(11) 94444-5555',
       user_type: 'lojista',
       store_name: 'Borracharia & AutoPeças Express',
@@ -109,24 +117,25 @@ const SEED_DATA = {
 
 function runSeeder() {
   console.log('================================================================');
-  console.log('🚀 SEEDER DE DADOS DE TESTE - APP ENTREGA (TCC)');
+  console.log('🚀 SEEDER DE DADOS DE TESTE - MOTOHELP (TCC)');
+  console.log('🔒 Criptografia: SHA-256 habilitado (sem senhas em texto puro)');
   console.log('================================================================');
   
   console.log(`\n🛵 ENTREGADORES DE MOTO MOCKADOS (${SEED_DATA.entregadores.length}):`);
   SEED_DATA.entregadores.forEach((driver, idx) => {
-    console.log(`  [${idx + 1}] ${driver.name} | E-mail: ${driver.email} | Senha: ${driver.password} | Moto: ${driver.vehicle_plate} (CNH: ${driver.cnh})`);
+    console.log(`  [${idx + 1}] ${driver.name} | E-mail: ${driver.email} | Hash SHA-256: ${driver.password_hash.substring(0, 16)}... | Moto: ${driver.vehicle_plate} (CNH: ${driver.cnh})`);
   });
 
   console.log(`\n🏪 LOJISTAS / ESTABELECIMENTOS MOCKADOS (${SEED_DATA.lojistas.length}):`);
   SEED_DATA.lojistas.forEach((store, idx) => {
-    console.log(`  [${idx + 1}] ${store.store_name} (Resp: ${store.name}) | E-mail: ${store.email} | Senha: ${store.password} | Cat: ${store.category}`);
+    console.log(`  [${idx + 1}] ${store.store_name} (Resp: ${store.name}) | E-mail: ${store.email} | Hash SHA-256: ${store.password_hash.substring(0, 16)}... | Cat: ${store.category}`);
   });
 
   const outputPath = path.join(__dirname, 'seed_data.json');
   fs.writeFileSync(outputPath, JSON.stringify(SEED_DATA, null, 2), 'utf-8');
 
   console.log('\n================================================================');
-  console.log(`✅ Arquivo JSON gerado com sucesso em: ${outputPath}`);
+  console.log(`✅ Arquivo JSON com hashes gerado com sucesso em: ${outputPath}`);
   console.log('================================================================\n');
 }
 
