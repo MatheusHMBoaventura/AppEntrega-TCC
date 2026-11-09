@@ -1425,7 +1425,35 @@
             <span><strong>Dica:</strong> Postos ⛽, borracharias 🛞 e mecânicas 🔧 também aparecem como pins com emojis direto no seu mapa!</span>
           </div>
 
-          <!-- Lista dos 3 mais próximos com telefone em destaque -->
+          <!-- Categorias de POIs SOS (RF09 / RN06) -->
+          <div class="sos-categories-bar" style="display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:12px; -webkit-overflow-scrolling:touch;">
+            <button type="button" class="sos-cat-btn active" data-cat="all" style="padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; border:1px solid #e2e8f0; background:#0f172a; color:#fff; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:5px;">
+              <span>🚨</span> Todos (5 km)
+            </button>
+            <button type="button" class="sos-cat-btn" data-cat="fuel" style="padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:5px;">
+              <span>⛽</span> Postos
+            </button>
+            <button type="button" class="sos-cat-btn" data-cat="tyres" style="padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:5px;">
+              <span>🛞</span> Borracharias
+            </button>
+            <button type="button" class="sos-cat-btn" data-cat="motorcycle_repair" style="padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:5px;">
+              <span>🏍️</span> Oficinas Moto
+            </button>
+            <button type="button" class="sos-cat-btn" data-cat="car_repair" style="padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:5px;">
+              <span>🔧</span> Mecânicas
+            </button>
+            <button type="button" class="sos-cat-btn" data-cat="auto_parts" style="padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:5px;">
+              <span>⚙️</span> Autopeças
+            </button>
+          </div>
+
+          <!-- Status de Localização e Conexão -->
+          <div id="sos-status-badge" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:0.72rem; color:#64748b;">
+            <span id="sos-gps-info"><i class="fa-solid fa-location-crosshairs"></i> Aguardando coordenadas GPS...</span>
+            <span id="sos-cache-info" class="hidden" style="background:#fef3c7; color:#b45309; padding:2px 8px; border-radius:10px; font-weight:600;">Modo Offline (Cache)</span>
+          </div>
+
+          <!-- Lista dos locais reais encontrados via Overpass -->
           <div class="sos-list" id="sos-merchants-list">
             <!-- Preenchido dinamicamente via JS -->
           </div>

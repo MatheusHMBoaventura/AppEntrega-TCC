@@ -4348,6 +4348,21 @@ input:checked + .slider:before {
   margin: 0;
 }
 
+.sos-cat-btn {
+  transition: all 0.2s ease;
+}
+
+.sos-cat-btn:hover {
+  background: #e2e8f0 !important;
+}
+
+.sos-cat-btn.active {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
+}
+
 .sos-list {
   display: flex;
   flex-direction: column;

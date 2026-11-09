@@ -370,63 +370,79 @@ secao */
       }, 100);
     });
 
-    // Iniciar rastreamento de localização GPS
+    // Iniciar rastreamento de localização GPS real do dispositivo
     startDelivererLocationTracking();
-
-    // Carregar POIs imediatamente com o centro atual (antes do GPS confirmar)
-    // Isso evita espera caso o GPS demore
-    setTimeout(() => {
-      if (!hasCenteredOnUser) {
-        loadMapNearbyPOIs(currentCoords.lat, currentCoords.lng);
-      }
-    }, 1500);
   }
 
   let hasCenteredOnUser = false;
+  let isGpsConfirmed = false;
 
   function startDelivererLocationTracking() {
+    const mapStatusText = document.getElementById('map-status-text');
+    if (mapStatusText) {
+      mapStatusText.innerText = '📍 Obtendo sinal GPS...';
+    }
+
     if ('geolocation' in navigator) {
-      // Primeiro tenta obter posição imediata (getCurrentPosition) para ter POIs rápidos
+      // Primeiro tenta obter posição imediata com alta precisão
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
+          isGpsConfirmed = true;
           updateDelivererLocation(lat, lng);
         },
         (err) => {
           console.warn('GPS getCurrentPosition falhou:', err.message);
+          if (mapStatusText && !isGpsConfirmed) {
+            mapStatusText.innerText = '⚠️ GPS indisponível (Aguardando sinal)';
+          }
         },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
 
-      // watchPosition para atualizações contínuas
+      // watchPosition para atualizações contínuas em tempo real
       watchPositionId = navigator.geolocation.watchPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
+          isGpsConfirmed = true;
           updateDelivererLocation(lat, lng);
         },
         (err) => {
-          console.warn('GPS indisponivel ou permissao pendente. Usando localizacao base:', err.message);
-          updateDelivererLocation(MAP_CENTER[0], MAP_CENTER[1]);
+          console.warn('Sinal GPS pendente ou erro:', err.message);
+          if (mapStatusText && !isGpsConfirmed) {
+            mapStatusText.innerText = '⚠️ GPS indisponível. Verifique as permissões.';
+          }
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
       );
+    } else {
+      if (mapStatusText) {
+        mapStatusText.innerText = '⚠️ Geolocalização não suportada';
+      }
     }
   }
 
   function updateDelivererLocation(lat, lng) {
+    const prevCoords = currentCoords;
     currentCoords = { lat, lng };
 
     if (delivererMarker && mapInstance) {
       delivererMarker.setLatLng([lat, lng]);
 
-      // Na primeira obtenção de GPS, centraliza a câmera na localização real do usuário
+      // Na primeira obtenção de GPS confirmado, centraliza na localização REAL do entregador
       if (!hasCenteredOnUser) {
         mapInstance.setView([lat, lng], 16);
         hasCenteredOnUser = true;
-        // Carrega POIs reais com a coordenada GPS confirmada (com force=true para substituir qualquer prévia)
+        // Consulta POIs reais baseados na posição GPS recém-confirmada
         loadMapNearbyPOIs(lat, lng, true);
+      } else if (prevCoords) {
+        // Atualiza os POIs quando houver deslocamento significativo (> 500m)
+        const movedKm = haversineDistanceKm(prevCoords.lat, prevCoords.lng, lat, lng);
+        if (movedKm >= 0.5) {
+          loadMapNearbyPOIs(lat, lng, false);
+        }
       }
     }
 
@@ -542,11 +558,15 @@ secao */
   }
 
   // ==========================================================================
-  // PINS COM EMOJIS NO MAPA: POSTOS (⛽), BORRACHARIAS (🛞) E MECÂNICAS (🔧)
+  // PINS COM EMOJIS NO MAPA E ASSISTÊNCIA SOS (RF09 / RN06):
+  // 5 CATEGORIAS: POSTOS (⛽), BORRACHARIAS (🛞), OFICINAS MOTO (🏍️), MECÂNICAS (🔧) E AUTOPEÇAS (⚙️)
   // ==========================================================================
   let poiLayerGroup = null;
   let lastPoiFetchTime = 0;
   let lastPoiCenter = null;
+  let currentSosFilter = 'all';
+  let cachedRealPois = null; // Armazenamento local de dados reais consultados
+  let cachedRealPoisTimestamp = 0;
 
   function haversineDistanceKm(lat1, lng1, lat2, lng2) {
     const R = 6371;
@@ -558,7 +578,7 @@ secao */
 
   function getPoiEmojiIcon(type) {
     let emoji = '🔧';
-    let bg = 'linear-gradient(135deg, #7c3aed, #6d28d9)'; // Oficina (roxo)
+    let bg = 'linear-gradient(135deg, #7c3aed, #6d28d9)'; // Mecânica / Oficina de Carro (roxo)
     let shadow = 'rgba(124, 58, 237, 0.45)';
 
     if (type === 'fuel') {
@@ -569,10 +589,14 @@ secao */
       emoji = '🛞';
       bg = 'linear-gradient(135deg, #ea580c, #c2410c)'; // Borracharia (laranja/âmbar)
       shadow = 'rgba(234, 88, 12, 0.5)';
-    } else if (type === 'motorcycle') {
+    } else if (type === 'motorcycle_repair') {
       emoji = '🏍️';
-      bg = 'linear-gradient(135deg, #0d9488, #0f766e)'; // Oficina de moto (verde-azulado)
+      bg = 'linear-gradient(135deg, #0d9488, #0f766e)'; // Oficina de motocicletas (verde-azulado)
       shadow = 'rgba(13, 148, 136, 0.5)';
+    } else if (type === 'auto_parts') {
+      emoji = '⚙️';
+      bg = 'linear-gradient(135deg, #b45309, #92400e)'; // Autopeças (bronze)
+      shadow = 'rgba(180, 83, 9, 0.5)';
     }
 
     return L.divIcon({
@@ -602,32 +626,53 @@ secao */
     });
   }
 
-  // Servidores espelho Overpass para fallback de rede
+  // Servidores espelho Overpass com fallback sequencial resiliente
   const OVERPASS_SERVERS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
     'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
   ];
 
-  async function fetchOverpassNearbyPOIs(lat, lng, radius) {
-    // Query ampliada: postos de combustível, borracharias, mecânicas de moto e carro, auto peças
+  /**
+   * Consulta os servidores Overpass com bounding box e raio de 5 km ao redor do GPS confirmado.
+   * Cobre estritamente as 5 categorias de socorro e suporte ao entregador (RF09 / RN06).
+   */
+  async function fetchOverpassNearbyPOIs(lat, lng, radius = 5000) {
+    // Cálculo da bounding box equivalente a ~5 km
+    const latDelta = radius / 111000;
+    const lngDelta = radius / (111000 * Math.cos(lat * Math.PI / 180));
+    const south = (lat - latDelta).toFixed(6);
+    const north = (lat + latDelta).toFixed(6);
+    const west = (lng - lngDelta).toFixed(6);
+    const east = (lng + lngDelta).toFixed(6);
+    const bbox = `${south},${west},${north},${east}`;
+
+    // Consulta OpenStreetMap estruturada nas 5 categorias
     const query = `
       [out:json][timeout:25];
       (
-        node["amenity"="fuel"](around:${radius},${lat},${lng});
-        way["amenity"="fuel"](around:${radius},${lat},${lng});
-        node["shop"~"^(tyres|car_repair|motorcycle_repair|car_parts|auto_parts|workshop)$"](around:${radius},${lat},${lng});
-        way["shop"~"^(tyres|car_repair|motorcycle_repair|car_parts|auto_parts|workshop)$"](around:${radius},${lat},${lng});
-        node["craft"~"^(tyre_fitting|car_repair|motorcycle_repair)$"](around:${radius},${lat},${lng});
+        node["amenity"="fuel"](${bbox});
+        way["amenity"="fuel"](${bbox});
+        node["shop"="tyres"](${bbox});
+        way["shop"="tyres"](${bbox});
+        node["craft"="tyre_fitting"](${bbox});
+        node["shop"="motorcycle_repair"](${bbox});
+        way["shop"="motorcycle_repair"](${bbox});
+        node["craft"="motorcycle_repair"](${bbox});
+        node["shop"="car_repair"](${bbox});
+        way["shop"="car_repair"](${bbox});
+        node["craft"="car_repair"](${bbox});
+        node["shop"~"^(car_parts|auto_parts)$"](${bbox});
+        way["shop"~"^(car_parts|auto_parts)$"](${bbox});
       );
-      out center 30;
+      out center 50;
     `;
 
     let lastErr = null;
 
     for (const serverUrl of OVERPASS_SERVERS) {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos por servidor
+      const timeoutId = setTimeout(() => controller.abort(), 9000); // 9 segundos por servidor
       try {
         const resp = await fetch(serverUrl, {
           method: 'POST',
@@ -639,12 +684,8 @@ secao */
         if (!resp.ok) throw new Error(`HTTP ${resp.status} em ${serverUrl}`);
         const json = await resp.json();
         const elements = json.elements || [];
-        if (elements.length > 0) {
-          console.log(`✅ Overpass OK via ${serverUrl}: ${elements.length} resultados`);
-          return elements;
-        }
-        // Servidor respondeu mas sem resultados, tenta o próximo
-        lastErr = new Error('Nenhum resultado retornado');
+        console.log(`✅ Overpass respondido com sucesso via ${serverUrl}: ${elements.length} registros`);
+        return elements; // Mesmo que venha vazio (0 elementos), a resposta é válida
       } catch (err) {
         clearTimeout(timeoutId);
         lastErr = err;
@@ -656,7 +697,6 @@ secao */
   }
 
   function showPoiLoadingIndicator(show) {
-    // Indicador visual no mapa enquanto busca POIs
     let indicator = document.getElementById('poi-loading-indicator');
     if (show) {
       if (!indicator) {
@@ -670,8 +710,7 @@ secao */
           'backdrop-filter:blur(8px)', 'box-shadow:0 2px 12px rgba(0,0,0,0.3)',
           'pointer-events:none', 'white-space:nowrap'
         ].join(';');
-        indicator.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border:2px solid #38bdf8;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite"></span> Buscando postos e borracharias (5 km)...';
-        // Garante que o estilo de animação existe
+        indicator.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border:2px solid #38bdf8;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite"></span> Buscando socorro e postos reais (5 km)...';
         if (!document.getElementById('poi-spin-style')) {
           const s = document.createElement('style');
           s.id = 'poi-spin-style';
@@ -689,6 +728,62 @@ secao */
     }
   }
 
+  /**
+   * Converte nós e ways do OpenStreetMap em POIs estruturados nas 5 categorias reais
+   */
+  function parseOsmElementsToPois(elements, centerLat, centerLng) {
+    if (!elements || !Array.isArray(elements)) return [];
+
+    return elements
+      .filter(el => el.tags)
+      .map(el => {
+        const elLat = el.lat || el.center?.lat;
+        const elLng = el.lon || el.center?.lon;
+        if (!elLat || !elLng) return null;
+
+        const amenity = el.tags.amenity || '';
+        const shop = el.tags.shop || '';
+        const craft = el.tags.craft || '';
+
+        // Classificação estrita nas 5 categorias (RF09 / RN06)
+        let type = 'car_repair';
+        let typeLabel = 'Oficina Mecânica';
+
+        if (amenity === 'fuel') {
+          type = 'fuel';
+          typeLabel = 'Posto de Combustível';
+        } else if (shop === 'tyres' || craft === 'tyre_fitting') {
+          type = 'tyres';
+          typeLabel = 'Borracharia';
+        } else if (shop === 'motorcycle_repair' || craft === 'motorcycle_repair') {
+          type = 'motorcycle_repair';
+          typeLabel = 'Oficina de Motos';
+        } else if (shop === 'car_parts' || shop === 'auto_parts') {
+          type = 'auto_parts';
+          typeLabel = 'Autopeças';
+        } else if (shop === 'car_repair' || craft === 'car_repair') {
+          type = 'car_repair';
+          typeLabel = 'Oficina Mecânica';
+        }
+
+        const distKm = haversineDistanceKm(centerLat, centerLng, elLat, elLng);
+
+        return {
+          id: el.id,
+          name: el.tags.name || el.tags['name:pt'] || typeLabel,
+          address: [el.tags['addr:street'], el.tags['addr:housenumber']].filter(Boolean).join(', ') || el.tags['addr:full'] || 'Localização via OpenStreetMap',
+          phone: el.tags.phone || el.tags['contact:phone'] || el.tags['contact:mobile'] || '',
+          type,
+          typeLabel,
+          lat: elLat,
+          lng: elLng,
+          distKm
+        };
+      })
+      .filter(p => p && p.distKm <= 5.0) // Limite estrito de 5 km
+      .sort((a, b) => a.distKm - b.distKm);
+  }
+
   async function loadMapNearbyPOIs(lat, lng, force = false) {
     if (!mapInstance || typeof L === 'undefined') return;
 
@@ -697,10 +792,10 @@ secao */
     }
 
     const now = Date.now();
-    // Evitar requisições repetidas se não passou 60s e moveu menos de 500m
-    if (!force && lastPoiCenter && (now - lastPoiFetchTime < 60000)) {
+    // Evitar requisições desnecessárias se moveu menos de 400m e passou menos de 45s
+    if (!force && lastPoiCenter && (now - lastPoiFetchTime < 45000)) {
       const dist = haversineDistanceKm(lat, lng, lastPoiCenter.lat, lastPoiCenter.lng);
-      if (dist < 0.5) return;
+      if (dist < 0.4) return;
     }
 
     lastPoiFetchTime = now;
@@ -710,65 +805,39 @@ secao */
 
     try {
       const elements = await fetchOverpassNearbyPOIs(lat, lng, 5000); // 5 km
-      const places = elements
-        .filter(el => el.tags)
-        .map(el => {
-          const elLat = el.lat || el.center?.lat;
-          const elLng = el.lon || el.center?.lon;
-          if (!elLat || !elLng) return null;
-
-          const amenity = el.tags.amenity || '';
-          const shop = el.tags.shop || '';
-          const craft = el.tags.craft || '';
-          let type = 'car_repair';
-
-          if (amenity === 'fuel') {
-            type = 'fuel';
-          } else if (shop === 'tyres' || craft === 'tyre_fitting') {
-            type = 'tyres';
-          } else if (
-            shop === 'motorcycle_repair' ||
-            craft === 'motorcycle_repair'
-          ) {
-            type = 'motorcycle';
-          }
-
-          const distKm = haversineDistanceKm(lat, lng, elLat, elLng);
-          const defaultName =
-            type === 'fuel' ? 'Posto de Combustível' :
-            type === 'tyres' ? 'Borracharia' :
-            type === 'motorcycle' ? 'Oficina de Moto' :
-            'Mecânica / Auto Peças';
-
-          return {
-            name: el.tags.name || el.tags['name:pt'] || defaultName,
-            address: [el.tags['addr:street'], el.tags['addr:housenumber']].filter(Boolean).join(', ') || 'Próximo à sua localização',
-            phone: el.tags.phone || el.tags['contact:phone'] || el.tags['contact:mobile'] || '',
-            type,
-            lat: elLat,
-            lng: elLng,
-            distKm
-          };
-        })
-        .filter(p => p && p.distKm <= 5.0)
-        .sort((a, b) => a.distKm - b.distKm)
-        .slice(0, 15); // Máximo 15 pins
+      const places = parseOsmElementsToPois(elements, lat, lng);
 
       showPoiLoadingIndicator(false);
 
+      // Armazenar em cache local com timestamp
+      cachedRealPois = places;
+      cachedRealPoisTimestamp = Date.now();
+      try {
+        localStorage.setItem('MotoHelp_RealPois_Cache', JSON.stringify({
+          lat, lng, timestamp: cachedRealPoisTimestamp, places
+        }));
+      } catch (_) {}
+
       if (places.length === 0) {
-        console.warn('Overpass retornou resultados mas nenhum válido na área de 5 km.');
-        showToast('⛽ Nenhum posto ou borracharia encontrado em 5 km.', 'info');
+        poiLayerGroup.clearLayers();
+        showToast('Nenhum estabelecimento encontrado em um raio de 5 km da sua posição.', 'info');
         return;
       }
 
-      renderPoiMarkers(places);
-      showToast(`⛽ ${places.length} locais encontrados em até 5 km`, 'success');
+      renderPoiMarkers(places.slice(0, 20)); // Exibe até 20 locais no mapa
+      showToast(`📍 ${places.length} locais reais encontrados em até 5 km`, 'success');
     } catch (err) {
       showPoiLoadingIndicator(false);
       console.warn('Overpass POIs falhou em todos os servidores:', err.message);
-      showToast('⚠️ Não foi possível buscar postos em tempo real. Verifique sua conexão.', 'info');
-      // Sem fallback simulado: se não há dados reais, não exibe pinos falsos
+      
+      // Tenta recuperar do cache real prévio se existir para esta área
+      if (cachedRealPois && cachedRealPois.length > 0) {
+        renderPoiMarkers(cachedRealPois.slice(0, 20));
+        showToast('Exibindo locais reais obtidos em cache recente.', 'info');
+      } else {
+        poiLayerGroup.clearLayers();
+        showToast('Não foi possível consultar os estabelecimentos no momento. Verifique sua conexão com a internet.', 'error');
+      }
     }
   }
 
@@ -780,18 +849,21 @@ secao */
       const icon = getPoiEmojiIcon(item.type);
       const marker = L.marker([item.lat, item.lng], { icon });
 
-      const emoji = item.type === 'fuel' ? '⛽' : item.type === 'tyres' ? '🛞' : item.type === 'motorcycle' ? '🏍️' : '🔧';
-      const typeLabel = item.type === 'fuel' ? 'Posto de Gasolina' : item.type === 'tyres' ? 'Borracharia' : item.type === 'motorcycle' ? 'Oficina de Moto' : 'Oficina Mecânica';
+      const emoji = item.type === 'fuel' ? '⛽' :
+                    item.type === 'tyres' ? '🛞' :
+                    item.type === 'motorcycle_repair' ? '🏍️' :
+                    item.type === 'auto_parts' ? '⚙️' : '🔧';
       const distLabel = item.distKm < 1 ? `${Math.round(item.distKm * 1000)} m` : `${item.distKm.toFixed(1)} km`;
       const cleanPhone = (item.phone || '').replace(/\D/g, '');
+      const hasPhone = cleanPhone.length >= 8;
 
       const popupContent = `
-        <div style="font-family: inherit; min-width: 210px; text-align: left; padding: 2px;">
+        <div style="font-family: inherit; min-width: 220px; text-align: left; padding: 2px;">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
             <span style="font-size:1.6rem; line-height:1;">${emoji}</span>
             <div>
               <strong style="font-size:0.88rem; color:#0f172a; display:block; line-height:1.2;">${escapeHtml(item.name)}</strong>
-              <span style="font-size:0.7rem; color:#64748b; font-weight:600;">${typeLabel} • ${distLabel} de você</span>
+              <span style="font-size:0.7rem; color:#64748b; font-weight:600;">${item.typeLabel} • ${distLabel}</span>
             </div>
           </div>
           <div style="font-size:0.72rem; color:#64748b; margin-bottom:8px;">
@@ -801,7 +873,7 @@ secao */
             <button type="button" class="btn-popup-route" style="flex:1; background:#10b981; color:#fff; border:none; padding:7px 10px; border-radius:8px; font-weight:700; font-size:0.75rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
               <i class="fa-solid fa-diamond-turn-right"></i> Traçar Rota
             </button>
-            ${cleanPhone ? `
+            ${hasPhone ? `
               <a href="tel:${cleanPhone}" style="background:#0f172a; color:#fff; text-decoration:none; padding:7px 10px; border-radius:8px; font-weight:700; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:4px;">
                 <i class="fa-solid fa-phone"></i> Ligar
               </a>
@@ -2933,7 +3005,9 @@ secao */
   });
 
   /* --------------------------------------------------------------------------
-     ASSISTÊNCIA EMERGENCIAL (SOS) - BORRACHARIAS E OFICINAS
+     ASSISTÊNCIA EMERGENCIAL (SOS) - PONTOS DE INTERESSE E CONTATOS (RF09 / RN06)
+     5 CATEGORIAS: POSTOS, BORRACHARIAS, OFICINAS MOTO, MECÂNICAS, AUTOPEÇAS
+     TOTALMENTE REAL VIA OPENSTREETMAP / OVERPASS - SEM FALLBACK FICTÍCIO
      -------------------------------------------------------------------------- */
   const fabSos = document.getElementById('fab-sos');
   if (fabSos) {
@@ -2942,308 +3016,249 @@ secao */
     });
   }
 
-  async function renderSosMerchantsList() {
+  // Configuração dos botões de filtro por categoria na interface SOS
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.sos-cat-btn');
+    if (btn) {
+      document.querySelectorAll('.sos-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentSosFilter = btn.getAttribute('data-cat') || 'all';
+      filterAndRenderSosList();
+    }
+  });
+
+  let currentSosPlaces = [];
+
+  function filterAndRenderSosList() {
     const listElem = document.getElementById('sos-merchants-list');
     if (!listElem) return;
 
-    listElem.innerHTML = '<div style="text-align:center; padding:15px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Localizando socorro mecânico próximo...</div>';
-
-    // Se já temos a coordenada real obtida pelo watchPosition, usa imediatamente sem esperar
-    let lat = currentCoords?.lat;
-    let lng = currentCoords?.lng;
-
-    if (!hasCenteredOnUser) {
-      try {
-        const pos = await new Promise((resolve, reject) =>
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 3500, maximumAge: 30000 })
-        );
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-        updateDelivererLocation(lat, lng);
-      } catch (_) {
-        lat = currentCoords?.lat || -23.5505;
-        lng = currentCoords?.lng || -46.6333;
-      }
+    let filtered = currentSosPlaces;
+    if (currentSosFilter !== 'all') {
+      filtered = currentSosPlaces.filter(p => p.type === currentSosFilter);
     }
 
-    const radiusMeters = 5000; // 5 km ao redor do entregador
-
-    /**
-     * Busca mecânicos / borracharias no OpenStreetMap via Overpass API pública otimizada
-     */
-    async function fetchOverpassNearby(lat, lng, radius) {
-      const query = `
-        [out:json][timeout:5];
-        (
-          node["shop"~"car_repair|tyres|motorcycle_repair"](around:${radius},${lat},${lng});
-          node["amenity"="fuel"](around:${radius},${lat},${lng});
-          way["shop"~"car_repair|tyres|motorcycle_repair"](around:${radius},${lat},${lng});
-        );
-        out center 15;
-      `;
-      const url = 'https://overpass-api.de/api/interpreter';
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          body: 'data=' + encodeURIComponent(query),
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (!resp.ok) throw new Error('Overpass indisponível');
-        const json = await resp.json();
-        return json.elements || [];
-      } catch (err) {
-        clearTimeout(timeoutId);
-        throw err;
-      }
-    }
-
-    function haversineKm(lat1, lng1, lat2, lng2) {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLng = (lng2 - lng1) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
-    function renderList(items) {
-      if (!items || items.length === 0) {
-        listElem.innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;"><i class="fa-solid fa-circle-exclamation" style="margin-bottom:8px;display:block;font-size:1.5rem;color:#f59e0b;"></i>Nenhum serviço de emergência encontrado num raio de 5 km da sua localização.<br><small>Tente se aproximar de uma via principal ou consultar socorro mecânico.</small></div>';
-        return;
-      }
-
-      // Ordenar rigorosamente por proximidade e exibir as 3 opções mais próximas do entregador
-      const top3 = [...items].sort((a, b) => (a.distKm || 0) - (b.distKm || 0)).slice(0, 3);
-
-      const wppText = encodeURIComponent(`Olá! Sou entregador e estou precisando de socorro mecânico próximo. Vocês atendem agora?`);
-
+    if (!filtered || filtered.length === 0) {
+      const catNames = {
+        'all': 'estabelecimentos de assistência',
+        'fuel': 'postos de combustível',
+        'tyres': 'borracharias',
+        'motorcycle_repair': 'oficinas de moto',
+        'car_repair': 'oficinas mecânicas',
+        'auto_parts': 'lojas de autopeças'
+      };
+      const label = catNames[currentSosFilter] || 'estabelecimentos';
       listElem.innerHTML = `
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 6px 10px; font-size:0.75rem; color:#94a3b8; border-bottom:1px solid var(--color-border, #e2e8f0); margin-bottom:10px;">
-          <span><i class="fa-solid fa-location-crosshairs" style="color:#f59e0b;"></i> As 3 opções mais próximas</span>
-          <span style="font-weight:600; color:#10b981;">Ordenado por proximidade</span>
+        <div style="text-align:center; padding:25px 15px; color:#94a3b8; background:rgba(0,0,0,0.02); border-radius:12px; border:1px dashed #cbd5e1;">
+          <i class="fa-solid fa-map-location-dot" style="margin-bottom:8px; display:block; font-size:2rem; color:#f59e0b;"></i>
+          <strong style="color:#475569; display:block; margin-bottom:4px;">Nenhum ${label} encontrado em até 5 km</strong>
+          <span style="font-size:0.75rem;">Não há registros desta categoria no OpenStreetMap próximos à sua localização atual.</span>
         </div>
-      ` + top3.map((m, idx) => {
-        const rawPhone = (m.phone || '').replace(/\D/g, '');
-        const cleanPhone = rawPhone ? (rawPhone.length === 11 ? `55${rawPhone}` : rawPhone) : '';
-        const hasPhone = rawPhone.length >= 8;
-        const displayPhone = hasPhone ? (rawPhone.length === 11 ? `(${rawPhone.slice(0,2)}) ${rawPhone.slice(2,7)}-${rawPhone.slice(7)}` : rawPhone) : '(11) 94444-5555';
-        const distLabel = m.distKm != null ? `<span style="color:#f59e0b; font-weight:700;"><i class="fa-solid fa-route"></i> ${m.distKm < 1 ? Math.round(m.distKm * 1000) + ' m' : m.distKm.toFixed(1) + ' km'}</span>` : '';
-        const typeIcon = m.type === 'tyres' ? 'fa-circle-dot' : m.type === 'fuel' ? 'fa-gas-pump' : 'fa-wrench';
-        const typeLabel = m.type === 'tyres' ? 'Borracharia' : m.type === 'fuel' ? 'Posto' : 'Oficina / Mecânico';
-        const titleName = m.name || typeLabel;
-        const rankBadge = `<span style="background:rgba(245,158,11,0.15); color:#d97706; font-size:0.65rem; font-weight:800; padding:2px 6px; border-radius:12px; margin-left:6px;">#${idx + 1} mais próximo</span>`;
+      `;
+      return;
+    }
 
-        return `
-          <div class="sos-card" style="display:flex; flex-direction:column; gap:8px;">
-            <div class="sos-card-header">
-              <div class="sos-icon"><i class="fa-solid ${typeIcon}"></i></div>
-              <div class="sos-info">
-                <h4>${titleName} ${rankBadge}</h4>
-                <span><i class="fa-solid fa-location-dot"></i> ${m.address || 'Próximo à sua localização'}</span>
-                <span style="margin-top:2px; display:block;">${distLabel}</span>
-              </div>
+    // Exibir estabelecimentos reais ordenados estritamente por distância Haversine
+    listElem.innerHTML = filtered.map((m, idx) => {
+      const rawPhone = (m.phone || '').replace(/\D/g, '');
+      const hasPhone = rawPhone.length >= 8;
+      const cleanPhone = hasPhone ? (rawPhone.length === 11 ? `55${rawPhone}` : rawPhone) : '';
+      const displayPhone = hasPhone ? (rawPhone.length === 11 ? `(${rawPhone.slice(0,2)}) ${rawPhone.slice(2,7)}-${rawPhone.slice(7)}` : rawPhone) : null;
+      const distLabel = m.distKm != null ? `<span style="color:#f59e0b; font-weight:700;"><i class="fa-solid fa-route"></i> ${m.distKm < 1 ? Math.round(m.distKm * 1000) + ' m' : m.distKm.toFixed(1) + ' km'}</span>` : '';
+
+      const typeIcon = m.type === 'fuel' ? 'fa-gas-pump' :
+                       m.type === 'tyres' ? 'fa-circle-dot' :
+                       m.type === 'motorcycle_repair' ? 'fa-motorcycle' :
+                       m.type === 'auto_parts' ? 'fa-gears' : 'fa-wrench';
+
+      const typeEmoji = m.type === 'fuel' ? '⛽' :
+                        m.type === 'tyres' ? '🛞' :
+                        m.type === 'motorcycle_repair' ? '🏍️' :
+                        m.type === 'auto_parts' ? '⚙️' : '🔧';
+
+      const titleName = m.name || m.typeLabel;
+      const rankBadge = `<span style="background:rgba(245,158,11,0.15); color:#d97706; font-size:0.65rem; font-weight:800; padding:2px 6px; border-radius:12px; margin-left:6px;">#${idx + 1} mais próximo</span>`;
+      const wppText = encodeURIComponent(`Olá! Sou entregador e estou próximo (${distLabel}). Vocês atendem agora?`);
+
+      return `
+        <div class="sos-card" style="display:flex; flex-direction:column; gap:8px;">
+          <div class="sos-card-header">
+            <div class="sos-icon" style="font-size:1.1rem;">
+              <span>${typeEmoji}</span>
             </div>
+            <div class="sos-info" style="flex:1;">
+              <h4>${escapeHtml(titleName)} ${rankBadge}</h4>
+              <span style="display:block; color:#64748b; font-size:0.75rem;"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(m.address)}</span>
+              <span style="margin-top:2px; display:block; font-size:0.75rem;">${m.typeLabel} • ${distLabel}</span>
+            </div>
+          </div>
 
-            <!-- Destaque do Telefone -->
-            <div style="background:rgba(0,0,0,0.03); border-radius:8px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;">
-              <span style="font-size:0.7rem; color:var(--color-text-muted); font-weight:700;">CONTATO DIRETO:</span>
+          ${displayPhone ? `
+            <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:0.7rem; color:var(--color-text-muted); font-weight:700;">TELEFONE CADASTRADO:</span>
               <strong style="font-size:0.88rem; color:#10b981; font-family:monospace;">📞 ${displayPhone}</strong>
             </div>
+          ` : ''}
 
-            <div class="sos-actions" style="display:flex; flex-wrap:wrap; gap:6px;">
-              <!-- Botão Principal: Ligar Agora -->
-              <a href="tel:${rawPhone || '11944445555'}" class="btn-sos-call-primary">
+          <div class="sos-actions" style="display:flex; flex-wrap:wrap; gap:6px;">
+            ${hasPhone ? `
+              <a href="tel:${rawPhone}" class="btn-sos-call-primary" style="flex:1 1 140px;">
                 <i class="fa-solid fa-phone-flip"></i> Ligar Agora (${displayPhone})
               </a>
-
               ${cleanPhone ? `
                 <a href="https://wa.me/${cleanPhone}?text=${wppText}" target="_blank" class="btn-sos-wpp" style="flex:1;">
                   <i class="fa-brands fa-whatsapp"></i> WhatsApp
                 </a>
               ` : ''}
+            ` : ''}
 
-              ${m.lat && m.lng ? `
-                <button type="button" class="btn-sos-route" data-lat="${m.lat}" data-lng="${m.lng}" data-name="${encodeURIComponent(titleName)}" style="flex:1; background:#0f172a;">
-                  <i class="fa-solid fa-diamond-turn-right"></i> Traçar Rota
-                </button>
-              ` : ''}
-            </div>
+            ${m.lat && m.lng ? `
+              <button type="button" class="btn-sos-route" data-lat="${m.lat}" data-lng="${m.lng}" data-name="${encodeURIComponent(titleName)}" style="flex:1; background:#0f172a; color:#fff;">
+                <i class="fa-solid fa-diamond-turn-right"></i> Traçar Rota
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Ação do botão "Traçar Rota" do SOS
+    listElem.querySelectorAll('.btn-sos-route').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const destLat = parseFloat(btn.getAttribute('data-lat'));
+        const destLng = parseFloat(btn.getAttribute('data-lng'));
+        const destName = decodeURIComponent(btn.getAttribute('data-name') || 'Socorro Mecânico');
+
+        if (isNaN(destLat) || isNaN(destLng)) {
+          showToast('Coordenadas indisponíveis para este local.', 'error');
+          return;
+        }
+
+        const modalSos = document.getElementById('modal-sos');
+        if (modalSos) closeModal(modalSos);
+
+        showToast(`📍 Traçando rota até ${destName}...`, 'info');
+
+        if (typeof L !== 'undefined' && mapInstance) {
+          if (window.activeSosMarker) {
+            mapInstance.removeLayer(window.activeSosMarker);
+          }
+          const sosMarkerIcon = L.divIcon({
+            className: 'custom-sos-marker',
+            html: `<div style="background:#ef4444; color:#fff; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(239,68,68,0.5); border:2px solid #fff; font-size:16px;"><i class="fa-solid fa-wrench"></i></div>`,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+          });
+          window.activeSosMarker = L.marker([destLat, destLng], { icon: sosMarkerIcon })
+            .addTo(mapInstance)
+            .bindPopup(`<b>${escapeHtml(destName)}</b><br><small style="color:#ef4444;font-weight:600;">Destino de Emergência</small>`)
+            .openPopup();
+        }
+
+        const startLat = currentCoords?.lat;
+        const startLng = currentCoords?.lng;
+        if (!startLat || !startLng) {
+          showToast('Aguardando sinal GPS para traçar rota de saída.', 'error');
+          return;
+        }
+
+        const route = await fetchOSRMRoute(startLat, startLng, destLat, destLng);
+        if (route) {
+          playSystemSound();
+          showToast(`🚀 Rota traçada até ${destName}: ${route.distanceKm} km (~${route.durationMin} min)`, 'success');
+        } else {
+          if (mapInstance) {
+            mapInstance.setView([destLat, destLng], 16);
+          }
+          showToast('Local marcado no mapa com sucesso!', 'info');
+        }
+      });
+    });
+  }
+
+  async function renderSosMerchantsList() {
+    const listElem = document.getElementById('sos-merchants-list');
+    const gpsInfo = document.getElementById('sos-gps-info');
+    const cacheInfo = document.getElementById('sos-cache-info');
+    if (!listElem) return;
+
+    listElem.innerHTML = '<div style="text-align:center; padding:25px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin" style="font-size:1.4rem; margin-bottom:8px; display:block;"></i>Consultando estabelecimentos reais via OpenStreetMap (raio de 5 km)...</div>';
+
+    // REGRA MANDATÓRIA RF09/RN06: Aguardar GPS REAL confirmado antes de consultar
+    let lat = currentCoords?.lat;
+    let lng = currentCoords?.lng;
+
+    if (!isGpsConfirmed) {
+      if (gpsInfo) gpsInfo.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i> Solicitando localização GPS do dispositivo...';
+      try {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 9000,
+            maximumAge: 0
+          })
+        );
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+        isGpsConfirmed = true;
+        updateDelivererLocation(lat, lng);
+      } catch (gpsErr) {
+        console.warn('GPS indisponível para SOS:', gpsErr.message);
+        if (gpsInfo) gpsInfo.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;"></i> GPS indisponível';
+        listElem.innerHTML = `
+          <div style="text-align:center; padding:25px 15px; color:#dc2626; background:#fee2e2; border-radius:12px; border:1px solid #fca5a5;">
+            <i class="fa-solid fa-location-crosshairs" style="font-size:2rem; margin-bottom:8px; display:block;"></i>
+            <strong style="display:block; margin-bottom:4px;">Não foi possível obter sua localização GPS</strong>
+            <span style="font-size:0.75rem; color:#7f1d1d;">Verifique as permissões de localização e ative o GPS do seu dispositivo para consultar locais reais próximos a você.</span>
           </div>
         `;
-      }).join('');
+        return;
+      }
+    }
 
-      // Ação do botão "Traçar Rota" do SOS
-      listElem.querySelectorAll('.btn-sos-route').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const destLat = parseFloat(btn.getAttribute('data-lat'));
-          const destLng = parseFloat(btn.getAttribute('data-lng'));
-          const destName = decodeURIComponent(btn.getAttribute('data-name') || 'Socorro Mecânico');
-
-          if (isNaN(destLat) || isNaN(destLng)) {
-            showToast('Coordenadas indisponíveis para este local.', 'error');
-            return;
-          }
-
-          // Fechar modal do SOS
-          const modalSos = document.getElementById('modal-sos');
-          if (modalSos) closeModal(modalSos);
-
-          showToast(`📍 Traçando rota até ${destName}...`, 'info');
-
-          // Marcar destino no mapa
-          if (typeof L !== 'undefined' && mapInstance) {
-            if (window.activeSosMarker) {
-              mapInstance.removeLayer(window.activeSosMarker);
-            }
-            const sosMarkerIcon = L.divIcon({
-              className: 'custom-sos-marker',
-              html: `<div style="background:#ef4444; color:#fff; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(239,68,68,0.5); border:2px solid #fff; font-size:16px;"><i class="fa-solid fa-wrench"></i></div>`,
-              iconSize: [36, 36],
-              iconAnchor: [18, 18]
-            });
-            window.activeSosMarker = L.marker([destLat, destLng], { icon: sosMarkerIcon })
-              .addTo(mapInstance)
-              .bindPopup(`<b>${destName}</b><br><small style="color:#ef4444;font-weight:600;">Destino de Emergência</small>`)
-              .openPopup();
-          }
-
-          // Calcular rota OSRM
-          const startLat = currentCoords?.lat || lat;
-          const startLng = currentCoords?.lng || lng;
-          const route = await fetchOSRMRoute(startLat, startLng, destLat, destLng);
-          if (route) {
-            playSystemSound();
-            showToast(`🚀 Rota traçada até ${destName}: ${route.distanceKm} km (~${route.durationMin} min)`, 'success');
-          } else {
-            if (mapInstance) {
-              mapInstance.setView([destLat, destLng], 16);
-            }
-            showToast('Local marcado no mapa com sucesso!', 'info');
-          }
-        });
-      });
+    if (gpsInfo) {
+      gpsInfo.innerHTML = `<i class="fa-solid fa-location-dot" style="color:#10b981;"></i> GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)} (Raio de 5 km)`;
     }
 
     try {
-      // 1. Tentar busca real no OpenStreetMap
-      const elements = await fetchOverpassNearby(lat, lng, radiusMeters);
+      // Consulta real nos 3 servidores Overpass com bounding box e Haversine 5 km
+      const elements = await fetchOverpassNearbyPOIs(lat, lng, 5000);
+      const places = parseOsmElementsToPois(elements, lat, lng);
 
-      const places = elements
-        .filter(el => el.tags && (el.tags.name || el.tags.shop || el.tags.amenity))
-        .map(el => {
-          const elLat = el.lat || el.center?.lat || lat;
-          const elLng = el.lon || el.center?.lon || lng;
-          const distKm = haversineKm(lat, lng, elLat, elLng);
-          const shop = el.tags.shop || el.tags.amenity || '';
-          return {
-            name: el.tags.name || el.tags['name:pt'] || null,
-            address: [el.tags['addr:street'], el.tags['addr:housenumber']].filter(Boolean).join(', ') || el.tags['addr:full'] || null,
-            phone: el.tags.phone || el.tags['contact:phone'] || el.tags['contact:mobile'] || '',
-            type: shop,
-            lat: elLat,
-            lng: elLng,
-            distKm
-          };
-        })
-        .filter(p => p.distKm <= 10) // Limita estritamente a no máximo 10 km da posição atual do usuário
-        .sort((a, b) => a.distKm - b.distKm)
-        .slice(0, 3); // Sempre as 3 mais próximas do usuário
+      // Atualiza cache real
+      cachedRealPois = places;
+      cachedRealPoisTimestamp = Date.now();
+      if (cacheInfo) cacheInfo.classList.add('hidden');
 
-      if (places.length > 0) {
-        renderList(places);
-      } else {
-        // Se Overpass não encontrou nada a menos de 10 km, usa socorro emergencial local
-        const emergencyFallback = [
-          {
-            name: 'Borracharia & Auto Peças 24h Express',
-            address: 'Socorro móvel / Raio de 1 km',
-            phone: '11944445555',
-            type: 'tyres',
-            lat: lat + 0.007,
-            lng: lng + 0.006,
-            distKm: 1.1
-          },
-          {
-            name: 'Socorro Mecânico & Guincho Rápido',
-            address: 'Equipe de socorro para motos e veículos',
-            phone: '11977778888',
-            type: 'car_repair',
-            lat: lat - 0.011,
-            lng: lng + 0.008,
-            distKm: 1.6
-          },
-          {
-            name: 'Posto & Conveniência Auto Elétrica',
-            address: 'Avenida principal de acesso',
-            phone: '11933332222',
-            type: 'fuel',
-            lat: lat + 0.013,
-            lng: lng - 0.009,
-            distKm: 2.1
-          }
-        ];
-        renderList(emergencyFallback);
-      }
-
+      currentSosPlaces = places;
+      filterAndRenderSosList();
     } catch (err) {
-      console.warn('Overpass indisponível, gerando socorro local:', err.message);
-      try {
-        const local = await window.dbManager.getEmergencyServices();
-        const validLocal = (local || []).map(m => {
-          const mLat = m.lat || (lat + 0.007);
-          const mLng = m.lng || (lng + 0.006);
-          const distKm = haversineKm(lat, lng, mLat, mLng);
-          return {
-            ...m,
-            name: m.store_name,
-            phone: m.phone || '',
-            lat: mLat,
-            lng: mLng,
-            distKm
-          };
-        }).filter(m => m.distKm <= 10);
-
-        if (validLocal.length > 0) {
-          renderList(validLocal);
-        } else {
-          throw new Error('Sem locais cadastrados');
-        }
-      } catch (e2) {
-        const emergencyFallback = [
-          {
-            name: 'Borracharia & Auto Peças 24h Express',
-            address: 'Socorro móvel / Raio de 1 km',
-            phone: '11944445555',
-            type: 'tyres',
-            lat: lat + 0.007,
-            lng: lng + 0.006,
-            distKm: 1.1
-          },
-          {
-            name: 'Socorro Mecânico & Guincho Rápido',
-            address: 'Equipe de socorro para motos e veículos',
-            phone: '11977778888',
-            type: 'car_repair',
-            lat: lat - 0.011,
-            lng: lng + 0.008,
-            distKm: 1.6
-          },
-          {
-            name: 'Posto & Conveniência Auto Elétrica',
-            address: 'Avenida principal de acesso',
-            phone: '11933332222',
-            type: 'fuel',
-            lat: lat + 0.013,
-            lng: lng - 0.009,
-            distKm: 2.1
+      console.warn('Overpass indisponível para SOS:', err.message);
+      // Tratamento offline/falha: se existir cache REAL recente da mesma região, permite usar identificando como cache
+      if (cachedRealPois && cachedRealPois.length > 0 && lastPoiCenter) {
+        const distFromCache = haversineDistanceKm(lat, lng, lastPoiCenter.lat, lastPoiCenter.lng);
+        if (distFromCache <= 1.0) { // Menos de 1 km da última consulta real
+          if (cacheInfo) {
+            const minutesAgo = Math.round((Date.now() - cachedRealPoisTimestamp) / 60000);
+            cacheInfo.textContent = `Offline (Cache real de ${minutesAgo} min atrás)`;
+            cacheInfo.classList.remove('hidden');
           }
-        ];
-        renderList(emergencyFallback);
+          currentSosPlaces = cachedRealPois;
+          filterAndRenderSosList();
+          showToast('Exibindo dados reais salvos em cache.', 'info');
+          return;
+        }
       }
+
+      // Se não há conexão e não há cache real válido
+      if (cacheInfo) cacheInfo.classList.add('hidden');
+      listElem.innerHTML = `
+        <div style="text-align:center; padding:25px 15px; color:#475569; background:#f1f5f9; border-radius:12px; border:1px solid #cbd5e1;">
+          <i class="fa-solid fa-wifi-slash" style="font-size:2rem; margin-bottom:8px; display:block; color:#64748b;"></i>
+          <strong style="display:block; margin-bottom:4px;">A busca de estabelecimentos exige conexão com a internet</strong>
+          <span style="font-size:0.75rem; color:#64748b;">Não foi possível contactar os servidores OpenStreetMap/Overpass no momento. Verifique sua conexão e tente novamente.</span>
+        </div>
+      `;
     }
   }
 
