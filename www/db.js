@@ -252,6 +252,13 @@ class LocalSQLiteManager {
         status TEXT,
         created_at TEXT,
         delivered_at TEXT
+      );`,
+      `CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        action TEXT,
+        payload TEXT,
+        created_at TEXT
       );`
     ];
     for (const sql of queries) {
@@ -616,6 +623,31 @@ class LocalSQLiteManager {
     sql += ' ORDER BY id DESC';
     const res = await this.query(sql, params);
     return res.rows.toArray();
+  }
+
+  async getOrderByQrCode(qrCode) {
+    if (!qrCode) return null;
+    const clean = String(qrCode).trim();
+    const res = await this.query('SELECT * FROM orders WHERE qr_code = ?', [clean]);
+    if (res.rows && res.rows.length > 0) {
+      return res.rows.item(0);
+    }
+    return null;
+  }
+
+  async logAudit(userId, action, payload = {}) {
+    try {
+      const now = new Date().toISOString();
+      const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      await this.query(
+        'INSERT INTO audit_logs (user_id, action, payload, created_at) VALUES (?, ?, ?, ?)',
+        [String(userId || ''), String(action || ''), payloadStr, now]
+      );
+      return true;
+    } catch (e) {
+      console.warn('[Audit Local] Falha ao registrar log local:', e);
+      return false;
+    }
   }
 
   async createOrder(orderData) {
@@ -1306,6 +1338,48 @@ class UnifiedDatabaseManager {
       return await this.sqlite.getOrders(status, merchantId, driverId);
     } else {
       return await this.sqlite.getOrders(status, merchantId, driverId);
+    }
+  }
+
+  async getOrderByQrCode(qrCode) {
+    if (!qrCode) return null;
+    const cleanCode = String(qrCode).trim();
+    if (this.isSupabaseMode) {
+      try {
+        const { data, error } = await this.supabase
+          .from('orders')
+          .select('*')
+          .eq('qr_code', cleanCode)
+          .maybeSingle();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn('Aviso: busca por qr_code no Supabase falhou, consultando SQLite:', err.message);
+      }
+      return await this.sqlite.getOrderByQrCode(cleanCode);
+    } else {
+      return await this.sqlite.getOrderByQrCode(cleanCode);
+    }
+  }
+
+  async logAudit(userId, action, payload = {}) {
+    const auditData = {
+      user_id: userId ? String(userId) : null,
+      action: String(action || 'action'),
+      payload: payload
+    };
+    if (this.isSupabaseMode) {
+      try {
+        const { error } = await this.supabase
+          .from('audit_logs')
+          .insert(auditData);
+        if (error) throw error;
+        return true;
+      } catch (err) {
+        console.warn('Aviso: falha ao inserir audit_log no Supabase, registrando localmente:', err.message);
+        return await this.sqlite.logAudit(userId, action, payload);
+      }
+    } else {
+      return await this.sqlite.logAudit(userId, action, payload);
     }
   }
 

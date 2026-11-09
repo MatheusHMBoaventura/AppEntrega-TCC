@@ -4962,6 +4962,73 @@ input:checked + .slider:before {
   }
 }
 
+/* ==========================================================================
+   ESTILOS RF06: CONFERÊNCIA E CONFIRMAÇÃO DE ENTREGA POR QR CODE
+   ========================================================================== */
+
+.qr-confirm-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #edf2f7;
+}
+
+.qr-confirm-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.qr-confirm-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.qr-confirm-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.4px;
+}
+
+.qr-confirm-val {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1e293b;
+  word-break: break-word;
+}
+
+.qr-scan-feedback {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  color: #38bdf8;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+
 
 
 

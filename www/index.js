@@ -1295,6 +1295,9 @@ secao */
 
   // botao + na direita (Abre a camera para ler QR Code diretamente)
   let cameraStream = null;
+  let qrScanAnimFrame = null;
+  let qrProcessing = false;
+  let qrPendingOrder = null;
 
   dom.fabQuick.addEventListener('click', () => {
     openModal('qr-scanner');
@@ -1312,9 +1315,25 @@ secao */
   // simulacao e validacao manual de QR code
   const btnSimulateQr = document.getElementById('btn-simulate-qr');
   if (btnSimulateQr) {
-    btnSimulateQr.addEventListener('click', () => {
-      const mockQrCode = `ENT-${Math.floor(10000 + Math.random() * 90000)}`;
-      processQrCodeRead(mockQrCode);
+    btnSimulateQr.addEventListener('click', async () => {
+      try {
+        // Tenta buscar uma entrega real pendente no banco para simular
+        let candidateCode = 'ENT-10421';
+        if (window.dbManager) {
+          const avail = await window.dbManager.getOrders('available');
+          if (avail && avail.length > 0 && avail[0].qr_code) {
+            candidateCode = avail[0].qr_code;
+          } else {
+            const inTransit = await window.dbManager.getOrders('in_transit');
+            if (inTransit && inTransit.length > 0 && inTransit[0].qr_code) {
+              candidateCode = inTransit[0].qr_code;
+            }
+          }
+        }
+        processQrCodeRead(candidateCode);
+      } catch (e) {
+        processQrCodeRead('ENT-10421');
+      }
     });
   }
 
@@ -1330,23 +1349,295 @@ secao */
     });
   }
 
+  // Eventos do Modal de Confirmação de Entrega (RF06)
+  const btnCloseQrConfirm = document.getElementById('btn-close-qr-confirm');
+  if (btnCloseQrConfirm) {
+    btnCloseQrConfirm.addEventListener('click', () => {
+      cancelQrConfirmation();
+    });
+  }
+
+  const btnQrCancelConfirm = document.getElementById('btn-qr-cancel-confirm');
+  if (btnQrCancelConfirm) {
+    btnQrCancelConfirm.addEventListener('click', () => {
+      cancelQrConfirmation();
+    });
+  }
+
+  function cancelQrConfirmation() {
+    qrPendingOrder = null;
+    qrProcessing = false;
+    const confirmModal = document.getElementById('modal-qr-confirm');
+    if (confirmModal) closeModal(confirmModal);
+    showToast('Confirmação cancelada.', 'info');
+  }
+
+  const btnQrConfirmDelivery = document.getElementById('btn-qr-confirm-delivery');
+  if (btnQrConfirmDelivery) {
+    btnQrConfirmDelivery.addEventListener('click', async () => {
+      if (!qrPendingOrder) {
+        showToast('Nenhuma entrega selecionada para confirmação.', 'error');
+        return;
+      }
+      if (!AppState.activeUser) {
+        showToast('Você precisa estar autenticado para finalizar entregas.', 'error');
+        return;
+      }
+
+      // Prevenir duplicidade simultânea
+      if (btnQrConfirmDelivery.disabled) return;
+      btnQrConfirmDelivery.disabled = true;
+      const originalText = btnQrConfirmDelivery.innerHTML;
+      btnQrConfirmDelivery.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Finalizando...';
+
+      const order = qrPendingOrder;
+      const driverId = String(AppState.activeUser.id);
+
+      try {
+        // Validação adicional de consistência antes de atualizar
+        const currentCheck = await window.dbManager.getOrderByQrCode(order.qr_code);
+        if (currentCheck && currentCheck.status === 'delivered') {
+          showToast('Esta entrega já foi finalizada por outro processo.', 'error');
+          cancelQrConfirmation();
+          return;
+        }
+
+        // Executar conclusão no banco (Supabase / SQLite)
+        const updatedOrder = await window.dbManager.completeOrder(order.id, driverId);
+
+        // Registrar em audit_logs
+        await window.dbManager.logAudit(driverId, 'delivery.completed_by_qrcode', {
+          order_id: order.id,
+          qr_code: order.qr_code,
+          driver_id: driverId,
+          store_name: order.store_name,
+          customer_name: order.customer_name,
+          delivery_address: order.delivery_address,
+          price: order.price,
+          completed_at: new Date().toISOString(),
+          is_offline: !window.dbManager.isSupabaseMode
+        });
+
+        // Fechar modal de confirmação
+        const confirmModal = document.getElementById('modal-qr-confirm');
+        if (confirmModal) closeModal(confirmModal);
+
+        // Se fazia parte da rota de paradas em memória, remove
+        const stopIdx = currentStopsList.findIndex(s => 
+          (s.orderId && String(s.orderId) === String(order.id)) || 
+          (s.qrCode && s.qrCode === order.qr_code)
+        );
+
+        if (stopIdx > 0) {
+          currentStopsList.splice(stopIdx, 1);
+          if (currentStopsList.length > 1) {
+            currentStopsList[0].lat = currentCoords.lat;
+            currentStopsList[0].lng = currentCoords.lng;
+            const reOrdered = currentStopsList.map((_, i) => i);
+            await renderOptimizedRouteOnMap(currentStopsList, reOrdered);
+          } else {
+            clearStopMarkersFromMap();
+            if (activeRoutePolyline && mapInstance) {
+              mapInstance.removeLayer(activeRoutePolyline);
+              activeRoutePolyline = null;
+            }
+          }
+          renderStopsList();
+          updateActiveDeliveryUI();
+        }
+
+        // Atualizar histórico de corridas/ganhos
+        if (AppState.activeUser) {
+          AppState.rides = await window.dbManager.getRides(AppState.activeUser.id);
+          renderHistoryList();
+        }
+
+        playSystemSound();
+
+        const successNotice = window.dbManager.isSupabaseMode
+          ? `🎉 Entrega #${order.id} (${order.qr_code}) confirmada com sucesso!`
+          : `🎉 Entrega #${order.id} confirmada localmente! (Pendente de sincronização)`;
+
+        showToast(successNotice, 'success');
+      } catch (err) {
+        console.error('Erro ao finalizar entrega por QR Code:', err);
+        showToast('Falha na atualização do banco de dados: ' + (err.message || 'Erro de comunicação'), 'error');
+      } finally {
+        qrPendingOrder = null;
+        qrProcessing = false;
+        btnQrConfirmDelivery.disabled = false;
+        btnQrConfirmDelivery.innerHTML = originalText;
+      }
+    });
+  }
+
+  // Processamento e Validação Robusta do QR Code (RF06)
   async function processQrCodeRead(code) {
-    playSystemSound();
+    if (qrProcessing) return;
+    qrProcessing = true;
+
     stopCameraScanner();
     const qrModal = document.getElementById('modal-qr-scanner');
     if (qrModal) closeModal(qrModal);
 
-    // Procurar parada correspondente ao código ou pegar a próxima parada ativa
-    let targetIdx = currentStopsList.findIndex(s => s.qrCode === code);
-    if (targetIdx === -1 && currentStopsList.length > 1) {
-      targetIdx = 1; // Pega a primeira parada pendente
+    playSystemSound();
+
+    const rawCode = String(code || '').trim();
+
+    // 1. Validar formato reconhecido pelo sistema (ENT-XXXXX)
+    if (!rawCode || !/^ENT-\d+$/i.test(rawCode)) {
+      showToast(`QR Code inválido: "${rawCode}". Formato padrão esperado: ENT-XXXXX.`, 'error');
+      qrProcessing = false;
+      return;
     }
 
-    if (targetIdx > 0 && targetIdx < currentStopsList.length) {
-      await completeStopByIndex(targetIdx, code);
-    } else {
-      showToast(`📦 Código ${code} lido com sucesso!`, 'info');
+    // 2. Verificar autenticação do usuário
+    if (!AppState.activeUser) {
+      showToast('Você precisa estar autenticado para validar entregas.', 'error');
+      qrProcessing = false;
+      return;
     }
+
+    showToast(`🔍 Verificando entrega ${rawCode}...`, 'info');
+
+    try {
+      // 3. Consultar no banco de dados (Supabase / SQLite)
+      const order = await window.dbManager.getOrderByQrCode(rawCode);
+
+      if (!order) {
+        showToast(`Entrega não encontrada no sistema para o código ${rawCode}.`, 'error');
+        qrProcessing = false;
+        return;
+      }
+
+      // 4. Impedir se já estiver finalizada ou cancelada
+      if (order.status === 'delivered') {
+        showToast(`A entrega #${order.id} (${rawCode}) já foi finalizada anteriormente.`, 'error');
+        qrProcessing = false;
+        return;
+      }
+
+      if (order.status === 'cancelled') {
+        showToast(`A entrega #${order.id} (${rawCode}) está cancelada e não pode ser concluída.`, 'error');
+        qrProcessing = false;
+        return;
+      }
+
+      // 5. Validar contexto/propriedade da entrega
+      const activeUserId = String(AppState.activeUser.id);
+      if (order.driver_id && String(order.driver_id).trim() !== '' && String(order.driver_id) !== activeUserId) {
+        showToast('Esta entrega já foi atribuída a outro entregador.', 'error');
+        qrProcessing = false;
+        return;
+      }
+
+      // 6. Verificar status compatível
+      if (!['available', 'accepted', 'in_transit'].includes(order.status)) {
+        showToast(`Status da entrega incompatível com finalização (${order.status}).`, 'error');
+        qrProcessing = false;
+        return;
+      }
+
+      // 7. Exibir tela/modal de conferência com dados da entrega
+      qrPendingOrder = order;
+      renderAndShowQrConfirmModal(order);
+
+    } catch (err) {
+      console.error('Erro na validação do QR Code:', err);
+      showToast('Falha na consulta ao banco de dados: ' + (err.message || 'Erro de conexão'), 'error');
+      qrProcessing = false;
+    }
+  }
+
+  function renderAndShowQrConfirmModal(order) {
+    const codeTag = document.getElementById('qr-confirm-code-tag');
+    if (codeTag) codeTag.textContent = order.qr_code || `ENT-${order.id}`;
+
+    const offlineNotice = document.getElementById('qr-confirm-offline-notice');
+    if (offlineNotice) {
+      if (window.dbManager && !window.dbManager.isSupabaseMode) {
+        offlineNotice.classList.remove('hidden');
+      } else {
+        offlineNotice.classList.add('hidden');
+      }
+    }
+
+    const body = document.getElementById('qr-confirm-body');
+    if (body) {
+      const statusLabels = {
+        'available': { text: 'Disponível', color: '#3b82f6', bg: '#eff6ff' },
+        'accepted': { text: 'Aceito', color: '#f59e0b', bg: '#fffbeb' },
+        'in_transit': { text: 'Em Rota', color: '#8b5cf6', bg: '#f5f3ff' },
+        'delivered': { text: 'Entregue', color: '#10b981', bg: '#ecfdf5' }
+      };
+      const st = statusLabels[order.status] || { text: order.status, color: '#64748b', bg: '#f1f5f9' };
+
+      body.innerHTML = `
+        <div class="qr-confirm-item">
+          <div class="qr-confirm-icon" style="background:#e0f2fe; color:#0284c7;">
+            <i class="fa-solid fa-store"></i>
+          </div>
+          <div class="qr-confirm-info">
+            <span class="qr-confirm-label">Estabelecimento / Loja</span>
+            <span class="qr-confirm-val">${order.store_name || 'Loja Parceira'}</span>
+          </div>
+        </div>
+
+        <div class="qr-confirm-item">
+          <div class="qr-confirm-icon" style="background:#ede9fe; color:#7c3aed;">
+            <i class="fa-solid fa-user"></i>
+          </div>
+          <div class="qr-confirm-info">
+            <span class="qr-confirm-label">Cliente / Destinatário</span>
+            <span class="qr-confirm-val">${order.customer_name || 'Cliente'} ${order.customer_phone ? `<small style="color:#64748b;">(${order.customer_phone})</small>` : ''}</span>
+          </div>
+        </div>
+
+        <div class="qr-confirm-item">
+          <div class="qr-confirm-icon" style="background:#fee2e2; color:#dc2626;">
+            <i class="fa-solid fa-location-dot"></i>
+          </div>
+          <div class="qr-confirm-info">
+            <span class="qr-confirm-label">Endereço de Entrega</span>
+            <span class="qr-confirm-val">${order.delivery_address || 'Endereço não informado'}</span>
+          </div>
+        </div>
+
+        <div class="qr-confirm-item">
+          <div class="qr-confirm-icon" style="background:#fef3c7; color:#d97706;">
+            <i class="fa-solid fa-box"></i>
+          </div>
+          <div class="qr-confirm-info">
+            <span class="qr-confirm-label">Detalhes do Pacote</span>
+            <span class="qr-confirm-val">${order.package_details || 'Pacote Padrão'}</span>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:2px;">
+          <div class="qr-confirm-item" style="flex:1;">
+            <div class="qr-confirm-icon" style="background:#dcfce7; color:#16a34a;">
+              <i class="fa-solid fa-hand-holding-dollar"></i>
+            </div>
+            <div class="qr-confirm-info">
+              <span class="qr-confirm-label">Valor do Frete</span>
+              <span class="qr-confirm-val" style="color:#16a34a;">${order.price || 'R$ 15,00'}</span>
+            </div>
+          </div>
+
+          <div class="qr-confirm-item" style="flex:1;">
+            <div class="qr-confirm-icon" style="background:${st.bg}; color:${st.color};">
+              <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div class="qr-confirm-info">
+              <span class="qr-confirm-label">Status Atual</span>
+              <span class="qr-confirm-val" style="color:${st.color};">${st.text}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    openModal('qr-confirm');
   }
 
   async function completeStopByIndex(idx, qrCodeUsed = null) {
@@ -1358,6 +1649,12 @@ secao */
     try {
       if (stop.orderId && AppState.activeUser) {
         await window.dbManager.completeOrder(stop.orderId, AppState.activeUser.id);
+        await window.dbManager.logAudit(AppState.activeUser.id, 'delivery.completed_by_route', {
+          order_id: stop.orderId,
+          stop_name: stop.name,
+          driver_id: AppState.activeUser.id,
+          price: stop.price
+        });
       } else if (AppState.activeUser) {
         const now = new Date().toLocaleDateString('pt-BR');
         await window.dbManager.addRide(
@@ -1436,34 +1733,116 @@ secao */
     });
   }
 
+  // Scanner de Câmera Real via jsQR (compatível com Android / Capacitor e Navegador)
   async function startCameraScanner() {
     const videoElem = document.getElementById('qr-video');
     const fallbackElem = document.getElementById('qr-camera-fallback');
+    qrProcessing = false;
+
+    // Cancela frame anterior se houver
+    if (qrScanAnimFrame) {
+      cancelAnimationFrame(qrScanAnimFrame);
+      qrScanAnimFrame = null;
+    }
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        cameraStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
         if (videoElem) {
           videoElem.srcObject = cameraStream;
-          videoElem.play();
+          videoElem.setAttribute('playsinline', 'true');
+          await videoElem.play();
+          if (fallbackElem) fallbackElem.classList.add('hidden');
+          
+          // Iniciar decodificação contínua de frames com jsQR
+          scanFrameLoop(videoElem);
         }
-        if (fallbackElem) fallbackElem.classList.add('hidden');
       } catch (err) {
-        console.warn('camera nao disponivel ou permissao negada', err);
-        if (fallbackElem) fallbackElem.classList.remove('hidden');
+        console.warn('Erro ao acessar câmera:', err);
+        let errorMsg = 'Câmera indisponível neste dispositivo.';
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          errorMsg = 'Permissão da câmera negada. Habilite o acesso nas configurações do Android.';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          errorMsg = 'Nenhuma câmera encontrada no dispositivo.';
+        }
+        showToast(errorMsg, 'error');
+        if (fallbackElem) {
+          fallbackElem.classList.remove('hidden');
+          const span = fallbackElem.querySelector('span');
+          if (span) span.textContent = errorMsg;
+        }
       }
     } else {
+      showToast('API de Câmera não suportada neste dispositivo.', 'error');
       if (fallbackElem) fallbackElem.classList.remove('hidden');
     }
   }
 
+  function scanFrameLoop(videoElem) {
+    if (!cameraStream || qrProcessing) return;
+
+    if (videoElem.readyState === videoElem.HAVE_ENOUGH_DATA) {
+      const vWidth = videoElem.videoWidth;
+      const vHeight = videoElem.videoHeight;
+
+      if (vWidth > 0 && vHeight > 0) {
+        // Cria canvas em memória para extração de ImageData
+        const canvas = document.createElement('canvas');
+        canvas.width = vWidth;
+        canvas.height = vHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoElem, 0, 0, vWidth, vHeight);
+
+        try {
+          const imageData = ctx.getImageData(0, 0, vWidth, vHeight);
+          const qrDecoder = (typeof window.jsQR === 'function') 
+            ? window.jsQR 
+            : (typeof jsQR === 'function' ? jsQR : (typeof jsQR !== 'undefined' ? jsQR.default : null));
+
+          if (qrDecoder) {
+            const code = qrDecoder(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert'
+            });
+
+            if (code && code.data) {
+              const decodedText = code.data.trim();
+              if (decodedText) {
+                // QR Code identificado com sucesso na câmera
+                processQrCodeRead(decodedText);
+                return; // Encerra o loop para aguardar confirmação
+              }
+            }
+          }
+        } catch (decodeErr) {
+          console.warn('Erro no frame do scanner:', decodeErr);
+        }
+      }
+    }
+
+    if (!qrProcessing && cameraStream) {
+      qrScanAnimFrame = requestAnimationFrame(() => scanFrameLoop(videoElem));
+    }
+  }
+
   function stopCameraScanner() {
+    if (qrScanAnimFrame) {
+      cancelAnimationFrame(qrScanAnimFrame);
+      qrScanAnimFrame = null;
+    }
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
       cameraStream = null;
     }
     const videoElem = document.getElementById('qr-video');
-    if (videoElem) videoElem.srcObject = null;
+    if (videoElem) {
+      videoElem.srcObject = null;
+    }
   }
 
   if (dom.btnSheetPaymentSelect) {
