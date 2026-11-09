@@ -3944,6 +3944,17 @@ secao */
         // Iniciar sessão
         await loginSession(user);
 
+        // Registro de auditoria: login bem-sucedido
+        if (window.dbManager) {
+          window.dbManager.logAudit(user.id, 'auth.login.success', {
+            table_name: 'users',
+            record_id: user.id,
+            email: user.email,
+            user_type: user.user_type,
+            login_time: new Date().toISOString()
+          });
+        }
+
         // Limpar inputs e status
         clearLoginError();
         if (dom.formLogin && typeof dom.formLogin.reset === 'function') dom.formLogin.reset();
@@ -3952,6 +3963,16 @@ secao */
       } catch (err) {
         const errorText = err.message || 'E-mail ou senha incorretos. Verifique suas credenciais.';
         showLoginError('❌ ' + errorText);
+
+        // Registro de auditoria: tentativa de login com falha
+        if (window.dbManager) {
+          window.dbManager.logAudit(null, 'auth.login.failed', {
+            table_name: 'users',
+            attempted_email: email,
+            error: errorText,
+            attempt_time: new Date().toISOString()
+          });
+        }
       } finally {
         if (btnSubmitLogin) {
           btnSubmitLogin.disabled = false;
@@ -4469,6 +4490,16 @@ secao */
   function logoutSession() {
     showToast('Encerrando sessão...', 'info');
     
+    const exitingUser = AppState.activeUser;
+    if (exitingUser && window.dbManager) {
+      window.dbManager.logAudit(exitingUser.id, 'auth.logout', {
+        table_name: 'users',
+        record_id: exitingUser.id,
+        email: exitingUser.email,
+        logout_time: new Date().toISOString()
+      });
+    }
+
     localStorage.removeItem('activeUserId');
     AppState.activeUser = null;
     

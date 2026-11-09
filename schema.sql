@@ -99,10 +99,63 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
     action VARCHAR(100) NOT NULL,
+    table_name VARCHAR(100),
+    record_id TEXT,
+    old_values JSONB,
+    new_values JSONB,
     payload JSONB,
     ip_address VARCHAR(45),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ============================================================================
+-- ATIVAÇÃO DE ROW LEVEL SECURITY (RLS) E POLÍTICAS DE ISOLAMENTO (§7.5)
+-- ============================================================================
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.delivery_drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.merchants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.places ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- POLÍTICAS: USERS
+CREATE POLICY "users_select_policy" ON public.users FOR SELECT TO authenticated
+    USING (id = auth.uid() OR user_type IN ('entregador', 'lojista'));
+CREATE POLICY "users_insert_policy" ON public.users FOR INSERT TO authenticated
+    WITH CHECK (id = auth.uid() AND user_type != 'admin');
+CREATE POLICY "users_update_policy" ON public.users FOR UPDATE TO authenticated
+    USING (id = auth.uid()) WITH CHECK (id = auth.uid() AND user_type != 'admin');
+
+-- POLÍTICAS: CARDS (ISOLAMENTO FINANCEIRO)
+CREATE POLICY "cards_select_policy" ON public.cards FOR SELECT TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "cards_insert_policy" ON public.cards FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+CREATE POLICY "cards_update_policy" ON public.cards FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "cards_delete_policy" ON public.cards FOR DELETE TO authenticated USING (user_id = auth.uid());
+
+-- POLÍTICAS: PLACES
+CREATE POLICY "places_select_policy" ON public.places FOR SELECT TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "places_insert_policy" ON public.places FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+CREATE POLICY "places_delete_policy" ON public.places FOR DELETE TO authenticated USING (user_id = auth.uid());
+
+-- POLÍTICAS: RIDES
+CREATE POLICY "rides_select_policy" ON public.rides FOR SELECT TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "rides_insert_policy" ON public.rides FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+
+-- POLÍTICAS: ORDERS (REGRAS DE NEGÓCIO DE ENTREGAS)
+CREATE POLICY "orders_select_policy" ON public.orders FOR SELECT TO authenticated
+    USING (merchant_id = auth.uid() OR driver_id = auth.uid() OR status = 'available');
+CREATE POLICY "orders_insert_policy" ON public.orders FOR INSERT TO authenticated
+    WITH CHECK (merchant_id = auth.uid());
+CREATE POLICY "orders_update_policy" ON public.orders FOR UPDATE TO authenticated
+    USING (merchant_id = auth.uid() OR driver_id = auth.uid() OR (status = 'available' AND driver_id IS NULL))
+    WITH CHECK (merchant_id = auth.uid() OR driver_id = auth.uid());
+
+-- POLÍTICAS: AUDIT_LOGS (IMUTABILIDADE)
+CREATE POLICY "audit_logs_select_policy" ON public.audit_logs FOR SELECT TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "audit_logs_insert_policy" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid() OR user_id IS NULL);
+-- NOTA: Sem políticas de UPDATE ou DELETE -> Operações bloqueadas por padrão no RLS.
 
 -- indices para otimizacao de consultas de chaves estrangeiras e logs
 CREATE INDEX IF NOT EXISTS idx_rides_user_id ON public.rides(user_id);

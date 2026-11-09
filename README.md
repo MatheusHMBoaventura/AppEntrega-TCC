@@ -64,15 +64,19 @@ Nas operações de atualização do status de entrega ou atribuição de lotes d
 As atualizações de dados sensíveis e históricos de rotas utilizam o nível de isolamento transacional `REPEATABLE READ`, mitigando problemas decorrentes de leituras fantasmas e garantindo a consistência das transações.
 
 ### Telemetria e Auditoria Semiestruturada
-A tabela de auditoria (`audit_logs`) emprega o tipo de dado `JSONB` no PostgreSQL. Essa abordagem simplifica o registro de eventos de segurança e payloads geográficos com estruturas dinâmicas, eliminando a necessidade de alterações físicas constantes no esquema do banco e otimizando o desempenho de consultas indexadas.
+A tabela de auditoria (`audit_logs`) emprega o tipo de dado `JSONB` no PostgreSQL combinado com campos dedicados para rastreabilidade estrita (`table_name`, `record_id`, `old_values`, `new_values`, `payload`). As operações críticas nas tabelas protegidas (`orders`, `users`, `cards`, `delivery_drivers`) geram registros automáticos por meio de **triggers PostgreSQL** (`trg_audit_*`), garantindo que alterações de status, finalizações de entrega por QR Code e manipulações de registros sejam auditadas sem depender exclusivamente da camada cliente. A tabela é protegida por políticas de imutabilidade (proibição irrestrita de `UPDATE` e `DELETE`).
 
-### Segurança e Criptografia de Credenciais (§7.5)
-O sistema elimina integralmente o armazenamento ou comparação de senhas em texto puro através de uma arquitetura segura de autenticação em duas frentes:
-* **Ambiente em Nuvem (Supabase Auth)**: As credenciais não são persistidas na tabela pública `public.users`. O fluxo de login e registro é gerenciado pelo serviço oficial do Supabase Auth, que processa e armazena os segredos no schema fechado `auth.users` utilizando algoritmo adaptativo de derivação de chaves **Bcrypt** com salt criptográfico aleatório por padrão.
-* **Ambiente Offline / Contingência Local (SQLite & Android Nativo)**:
-  * No gerenciador local (`www/db.js`), toda senha é cifrada com algoritmo de mão única **SHA-256** (utilizando a Web Crypto API nativa do navegador/WebView `crypto.subtle.digest` com fallback autônomo UTF-8) antes de qualquer operação de escrita ou consulta no banco.
-  * No aplicativo Android nativo ([`DatabaseHelper.java`](file:///c:/Users/Intersolid/Desktop/aaa/AppEntrega-TCC/android/app/src/main/java/com/motohelp/app/DatabaseHelper.java)), o método `hashPassword` aplica SHA-256 via `java.security.MessageDigest` com codificação UTF-8 estrita, sem fallbacks para texto puro.
-  * O sistema inclui rotina automática de migração transparente para hashes SHA-256 de bases legadas e higienização de objetos em memória (`delete user.password`), impedindo a exposição de segredos na interface do usuário.
+### Segurança, Isolamento de Dados e RLS (§7.5)
+O sistema implementa uma arquitetura robusta de segurança, integridade e isolamento de dados baseada em:
+* **Row Level Security (RLS) Ativo**: Habilitado em todas as tabelas sensíveis no PostgreSQL (`users`, `cards`, `places`, `rides`, `orders`, `delivery_drivers`, `audit_logs`). O isolamento garante que motoristas e lojistas só tenham acesso aos registros que lhes pertencem ou a pedidos disponíveis para entrega, com políticas declarativas de `SELECT`, `INSERT`, `UPDATE` e `DELETE` orientadas pelo identificador criptográfico confiável `auth.uid()`.
+* **Proteção contra Elevação de Privilégios**: As políticas de `WITH CHECK` impedem que usuários comuns alterem seu próprio papel para `admin` ou manipulem o `user_id` de registros de terceiros.
+* **Princípio do Menor Privilégio (Grants)**: O papel `anon` tem todos os acessos sensíveis revogados, enquanto o papel `authenticated` opera estritamente sob mediação do RLS.
+* **Criptografia de Credenciais**:
+  * **Ambiente em Nuvem (Supabase Auth)**: As credenciais não são persistidas na tabela pública `public.users`. O fluxo de login e registro é gerenciado pelo serviço oficial do Supabase Auth, que processa e armazena os segredos no schema fechado `auth.users` utilizando algoritmo adaptativo de derivação de chaves **Bcrypt** com salt criptográfico aleatório por padrão.
+  * **Ambiente Offline / Contingência Local (SQLite & Android Nativo)**:
+    * No gerenciador local (`www/db.js`), toda senha é cifrada com algoritmo de mão única **SHA-256** (utilizando a Web Crypto API nativa do navegador/WebView `crypto.subtle.digest` com fallback autônomo UTF-8) antes de qualquer operação de escrita ou consulta no banco.
+    * No aplicativo Android nativo ([`DatabaseHelper.java`](file:///c:/Users/Intersolid/Desktop/aaa/AppEntrega-TCC/android/app/src/main/java/com/motohelp/app/DatabaseHelper.java)), o método `hashPassword` aplica SHA-256 via `java.security.MessageDigest` com codificação UTF-8 estrita, sem fallbacks para texto puro.
+    * O sistema inclui rotina automática de migração transparente para hashes SHA-256 de bases legadas e higienização de objetos em memória (`delete user.password`), impedindo a exposição de segredos na interface do usuário.
 
 ## Estrutura do Banco de Dados
 

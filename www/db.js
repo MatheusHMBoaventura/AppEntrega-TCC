@@ -257,6 +257,10 @@ class LocalSQLiteManager {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT,
         action TEXT,
+        table_name TEXT,
+        record_id TEXT,
+        old_values TEXT,
+        new_values TEXT,
         payload TEXT,
         created_at TEXT
       );`
@@ -639,9 +643,14 @@ class LocalSQLiteManager {
     try {
       const now = new Date().toISOString();
       const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      const tableName = payload && payload.table_name ? String(payload.table_name) : null;
+      const recordId = payload && payload.record_id ? String(payload.record_id) : (payload && payload.order_id ? String(payload.order_id) : null);
+      const oldVals = payload && payload.old_values ? JSON.stringify(payload.old_values) : null;
+      const newVals = payload && payload.new_values ? JSON.stringify(payload.new_values) : null;
+
       await this.query(
-        'INSERT INTO audit_logs (user_id, action, payload, created_at) VALUES (?, ?, ?, ?)',
-        [String(userId || ''), String(action || ''), payloadStr, now]
+        'INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [String(userId || ''), String(action || ''), tableName, recordId, oldVals, newVals, payloadStr, now]
       );
       return true;
     } catch (e) {
@@ -1362,9 +1371,18 @@ class UnifiedDatabaseManager {
   }
 
   async logAudit(userId, action, payload = {}) {
+    const tableName = payload && payload.table_name ? String(payload.table_name) : null;
+    const recordId = payload && payload.record_id ? String(payload.record_id) : (payload && payload.order_id ? String(payload.order_id) : null);
+    const oldVals = payload && payload.old_values ? payload.old_values : null;
+    const newVals = payload && payload.new_values ? payload.new_values : null;
+
     const auditData = {
       user_id: userId ? String(userId) : null,
       action: String(action || 'action'),
+      table_name: tableName,
+      record_id: recordId,
+      old_values: oldVals,
+      new_values: newVals,
       payload: payload
     };
     if (this.isSupabaseMode) {
