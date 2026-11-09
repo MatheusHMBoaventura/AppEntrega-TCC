@@ -1,6 +1,6 @@
-# 📄 CHANGELOG & DOCUMENTAÇÃO TÉCNICA - APP ENTREGA (TCC)
+# 📄 CHANGELOG & DOCUMENTAÇÃO TÉCNICA - MOTOHELP (TCC)
 
-Visão geral completa das funcionalidades implementadas, arquitetura do sistema, banco de dados e stack de tecnologias do **AppEntrega**.
+Visão geral completa das funcionalidades implementadas, arquitetura do sistema, banco de dados e stack de tecnologias do **MotoHelp**.
 
 ---
 
@@ -108,6 +108,14 @@ AppEntrega-TCC/
 ---
 
 ## 📜 Histórico de Modificações (Changelog)
+
+### Version 2.0.0 - 2026-11-09
+- **Rebranding**: Renomeação completa da aplicação e pacotes para **MotoHelp** (identificadores `com.motohelp.app` no Android/Capacitor, interfaces, títulos e documentação).
+- **Security (§7.5)**: Eliminação integral de senhas em texto puro:
+  - Criptografia com algoritmo **SHA-256** na camada de contingência local (`www/db.js`) e no módulo nativo Android ([`DatabaseHelper.java`](file:///c:/Users/Intersolid/Desktop/aaa/AppEntrega-TCC/android/app/src/main/java/com/motohelp/app/DatabaseHelper.java)).
+  - Delegação formal da autenticação na nuvem para o **Supabase Auth** com hashing adaptativo **Bcrypt** no schema isolado `auth.users`.
+  - Rotina automática de migração transparente de credenciais legadas (`migrateLegacyPasswords`) e higienização de objetos em memória (`delete user.password`).
+  - Atualização dos scripts de carga e sementes de teste com `password_hash` ([`seed.js`](file:///c:/Users/Intersolid/Desktop/aaa/AppEntrega-TCC/seed.js) e [`seed_data.json`](file:///c:/Users/Intersolid/Desktop/aaa/AppEntrega-TCC/seed_data.json)).
 
 ### Version 1.3.0 - 2026-08-25
 - **Feat**: Adicionado o Roteirizador de Entregas baseado em Matriz OSRM + Solver 2-Opt (OR-Tools).
