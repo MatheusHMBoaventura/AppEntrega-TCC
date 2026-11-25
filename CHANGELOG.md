@@ -109,6 +109,13 @@ AppEntrega-TCC/
 
 ## 📜 Histórico de Modificações (Changelog)
 
+### Version 2.1.1 - 2026-11-25
+- **Correção crítica (modo nuvem):** ao fazer login, o `id` da linha de `delivery_drivers`/`merchants` sobrescrevia o UUID do usuário. Com isso o lojista não conseguia publicar fretes e o entregador não conseguia aceitá-los. O perfil agora é montado por `loadFullProfile`, que mantém o UUID.
+- Ao reabrir o app (sessão restaurada ou login com Google), o perfil passa a incluir os dados de entregador ou lojista; antes o app pedia CPF, placa e CNH de novo.
+- Documentos do entregador não caem mais no banco local quando a nuvem falha: o app mostra o erro.
+- Editar o perfil não apaga mais o tipo de usuário da sessão; o e-mail de login não é alterado pela tela de perfil no modo nuvem.
+- Evitado login duplicado quando o login por senha dispara o evento `SIGNED_IN`.
+
 ### Version 2.1.0 - 2026-11-25
 - **Fix (roteirizador)**: marcadores numerados e métricas (km, minutos) voltaram a aparecer; a variável `marker` não era criada em `addNumberedStopMarkers`. O painel de sequência agora mostra a mesma ordem da lista e do mapa.
 - **Security (XSS)**: dados de pedidos, histórico, locais, cartões, Nominatim e chat passam por `escapeHtml` antes de entrar em `innerHTML`.

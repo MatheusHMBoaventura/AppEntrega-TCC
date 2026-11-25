@@ -2688,7 +2688,7 @@ secao */
       );
 
       // sincronizar estado
-      AppState.activeUser = updated;
+      AppState.activeUser = { ...AppState.activeUser, ...updated };
 
       // rerenderizar dados visuais
       dom.userDisplayName.innerText = updated.name;
@@ -4724,7 +4724,7 @@ secao */
 
           // Listener reativo caso o redirect do Google OAuth termine de processar os tokens na URL
           window.dbManager.supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN' && session && session.user) {
+            if (event === 'SIGNED_IN' && session && session.user && !AppState.activeUser) {
               console.log('Login OAuth detectado via onAuthStateChange:', session.user.email);
               const user = await window.dbManager.getProfileOrFallback(session.user);
               await loginSession(user);
