@@ -637,9 +637,6 @@
                   <li>Limpe o cache do aplicativo nas configurações do seu celular.</li>
                   <li>Verifique sua conexão com a internet (Wi-Fi ou 4G/5G).</li>
                 </ul>
-                <button class="btn-support-chat-trigger btn-small-action" data-subject="Problemas com o app">
-                  <i class="fa-solid fa-comments"></i> Conversar com Suporte Técnico
-                </button>
               </div>
             </div>
 
@@ -664,9 +661,6 @@
                   <li><strong>Tempo de Espera:</strong> Caso o estabelecimento ou cliente atrase mais de 10 minutos para atender, você pode registrar ocorrência.</li>
                   <li><strong>Comprovante de Entrega:</strong> Finalize a entrega no marcador do mapa ou bipando o QR Code para garantir a confirmação do pagamento.</li>
                 </ul>
-                <button class="btn-support-chat-trigger btn-small-action" data-subject="Dúvidas sobre Pagamentos de Frete">
-                  <i class="fa-solid fa-comments"></i> Conversar com Suporte Financeiro
-                </button>
               </div>
             </div>
 
@@ -691,9 +685,6 @@
                   <li><strong>Endereço Incorreto:</strong> Verifique os pontos no mapa otimizado antes de iniciar a rota para evitar desvios longos.</li>
                   <li><strong>Avaria no Pacote:</strong> Caso a embalagem seja danificada no percurso, fotografe imediatamente e informe o lojista.</li>
                 </ul>
-                <button class="btn-support-chat-trigger btn-small-action" data-subject="Ocorrência de Entrega">
-                  <i class="fa-solid fa-comments"></i> Suporte de Ocorrências
-                </button>
               </div>
             </div>
 
@@ -718,36 +709,6 @@
                   <li><strong>Manutenção Preventiva:</strong> Acompanhe no seu perfil o controle de troca de óleo, pneus e kit relação.</li>
                   <li><strong>Emergência Policial (190):</strong> Em situações de risco ou sinistro grave, acione os órgãos competentes imediatamente.</li>
                 </ul>
-                <button class="btn-support-chat-trigger btn-small-action" data-subject="Suporte SOS e Segurança">
-                  <i class="fa-solid fa-shield-halved"></i> Contatar Suporte Emergencial
-                </button>
-              </div>
-            </div>
-
-            <!-- Tópico 5: Contato -->
-            <div class="accordion-item" data-topic="contact">
-              <div class="accordion-header">
-                <div class="header-left">
-                  <div class="help-icon-wrapper bg-pink">
-                    <i class="fa-solid fa-phone"></i>
-                  </div>
-                  <div class="help-title-info">
-                    <span class="help-title">Contato</span>
-                    <span class="help-subtext">Fale com o suporte</span>
-                  </div>
-                </div>
-                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
-              </div>
-              <div class="accordion-body">
-                <p>Nossa central de atendimento ao cliente funciona 24 horas por dia, 7 dias por semana.</p>
-                <div class="contact-buttons-grid">
-                  <button class="btn-support-chat-trigger btn-primary btn-chat-general" data-subject="Atendimento Geral">
-                    <i class="fa-solid fa-comments"></i> Iniciar Chat de Suporte
-                  </button>
-                  <a href="tel:0800123456" class="btn-secondary btn-call-support">
-                    <i class="fa-solid fa-phone"></i> Ligar: 0800 123 456
-                  </a>
-                </div>
               </div>
             </div>
           </div>
@@ -1010,44 +971,15 @@
         <div class="modal-body privacy-body">
           <div class="privacy-rich-text">
             <h4>Proteção de Dados e Termos de Uso</h4>
-            <p>Seus dados são protegidos sob a Lei Geral de Proteção de Dados (LGPD). Nós coletamos apenas as informações estritamente necessárias para a prestação do serviço de transporte:</p>
+            <p>Seus dados são tratados conforme a Lei Geral de Proteção de Dados (LGPD). O app coleta apenas o necessário para as entregas:</p>
             <ul>
-              <li><strong>Localização em tempo real:</strong> Utilizada para conectar você com os motoristas mais próximos e traçar a rota com precisão.</li>
-              <li><strong>Dados de perfil:</strong> Nome, email e telefone são compartilhados de forma restrita com o motorista aceito apenas durante a viagem ativa.</li>
-              <li><strong>Dados financeiros:</strong> Informações de cartão de crédito são criptografadas e salvas diretamente em parceiros de pagamento certificados (PCI-DSS), nunca armazenados cruamente em nossos servidores.</li>
+              <li><strong>Localização:</strong> usada para mostrar sua posição no mapa, traçar rotas e buscar postos e oficinas próximos.</li>
+              <li><strong>Dados de perfil:</strong> nome, e-mail e telefone ficam visíveis apenas para o lojista ou entregador dos pedidos em que você participa.</li>
+              <li><strong>Documentos do entregador:</strong> CPF, placa e CNH são usados apenas para habilitar o aceite de fretes.</li>
+              <li><strong>Cartões:</strong> o app guarda somente a bandeira, o titular e os 4 últimos dígitos, nunca o número completo.</li>
             </ul>
-            <p>Para dúvidas ou exclusão de conta, entre em contato diretamente com o nosso DPO pelo chat de ajuda.</p>
+            <p>Para dúvidas ou exclusão de conta, entre em contato com o responsável pelo projeto.</p>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ================= CHAT DE SUPORTE EM TEMPO REAL ================= -->
-    <div class="modal hidden" id="modal-support-chat">
-      <div class="modal-overlay"></div>
-      <div class="modal-wrapper chat-wrapper">
-        <div class="modal-header chat-header">
-          <div class="chat-title-container">
-            <div class="chat-agent-avatar"><i class="fa-solid fa-headset"></i></div>
-            <div class="chat-agent-info">
-              <span class="agent-name" id="chat-subject-title">Suporte Técnico</span>
-              <span class="agent-status"><span class="dot-online"></span> Atendente Online</span>
-            </div>
-          </div>
-          <button class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="modal-body chat-body" id="chat-messages-container">
-          <!-- Mensagens renderizadas dinamicamente via JS -->
-          <div class="chat-bubble received">
-            Olá, João! Sou o assistente virtual da MotoHelp. Como posso te ajudar com o tema <strong id="chat-bold-subject">Problemas com o app</strong> hoje?
-            <span class="bubble-time">Agora mesmo</span>
-          </div>
-        </div>
-        <div class="chat-footer">
-          <input type="text" id="input-chat-message" placeholder="Digite uma mensagem..." autocomplete="off">
-          <button id="btn-send-chat-msg" class="btn-send-msg" aria-label="Enviar mensagem">
-            <i class="fa-solid fa-paper-plane"></i>
-          </button>
         </div>
       </div>
     </div>

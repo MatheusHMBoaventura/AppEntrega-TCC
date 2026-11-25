@@ -1,7 +1,7 @@
 /* secao
  * indexjs logica e estado do aplicativo de mobilidade urbana
  * features interactive map autocomplete active ride simulation
- * payments manager modals support chat bot sqlitewebsql integration
+ * payments manager modals sqlitewebsql integration
 secao */
 
 const initApp = () => {
@@ -114,7 +114,6 @@ secao */
     tripEtaStatus: document.getElementById('trip-eta-status'),
     tripDistanceStatus: document.getElementById('trip-distance-status'),
     btnCancelTrip: document.getElementById('btn-cancel-trip'),
-    btnChatDriver: document.getElementById('btn-chat-driver'),
     
     // telas auxiliares
     historyList: document.getElementById('history-list'),
@@ -127,7 +126,6 @@ secao */
     modalSavedPlaces: document.getElementById('modal-saved-places'),
     modalSettings: document.getElementById('modal-settings'),
     modalPrivacy: document.getElementById('modal-privacy'),
-    modalSupportChat: document.getElementById('modal-support-chat'),
     savedPlacesList: document.getElementById('saved-places-list'),
     btnAddSavedPlace: document.getElementById('btn-add-saved-place'),
     
@@ -166,13 +164,6 @@ secao */
     previewCardNumber: document.getElementById('preview-card-number'),
     previewCardHolder: document.getElementById('preview-card-holder'),
     previewCardExpiry: document.getElementById('preview-card-expiry'),
-    
-    // chat
-    chatMessagesContainer: document.getElementById('chat-messages-container'),
-    inputChatMessage: document.getElementById('input-chat-message'),
-    btnSendChatMsg: document.getElementById('btn-send-chat-msg'),
-    chatSubjectTitle: document.getElementById('chat-subject-title'),
-    chatBoldSubject: document.getElementById('chat-bold-subject'),
 
     // tela de autenticacao login cadastro
     authScreen: document.getElementById('auth-screen'),
@@ -3704,103 +3695,6 @@ secao */
       }
     });
   });
-
-  /* secao
- * 15 chat de suporte em tempo real com bot intelligent help bot
-secao */
-  let activeChatSubject = 'Problemas com o app';
-
-  document.querySelectorAll('.btn-support-chat-trigger').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const subject = btn.getAttribute('data-subject');
-      openSupportChatModal(subject);
-    });
-  });
-
-  function openSupportChatModal(subject, customSubtitle = 'Suporte Online') {
-    activeChatSubject = subject;
-    dom.chatSubjectTitle.innerText = subject;
-    dom.chatBoldSubject.innerText = subject;
-    
-    dom.chatMessagesContainer.innerHTML = `
-      <div class="chat-bubble received">
-        Olá, ${escapeHtml(AppState.activeUser ? AppState.activeUser.name : 'visitante')}! Sou o assistente virtual da MotoHelp. Como posso te ajudar com o tema <strong>${escapeHtml(subject)}</strong> hoje?
-        <span class="bubble-time">Agora mesmo</span>
-      </div>
-    `;
-
-    openModal('support-chat');
-  }
-
-  dom.btnSendChatMsg.addEventListener('click', sendChatMessage);
-  dom.inputChatMessage.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendChatMessage();
-  });
-
-  function sendChatMessage() {
-    const text = dom.inputChatMessage.value.trim();
-    if (!text) return;
-
-    const userMsgHTML = `
-      <div class="chat-bubble sent">
-        ${escapeHtml(text)}
-        <span class="bubble-time">${getCurrentTimeFormatted()}</span>
-      </div>
-    `;
-    dom.chatMessagesContainer.insertAdjacentHTML('beforeend', userMsgHTML);
-    dom.inputChatMessage.value = '';
-    
-    scrollToChatBottom();
-    playSystemSound();
-
-    setTimeout(() => {
-      const botResponse = getBotSimulatedResponse(text, activeChatSubject);
-      
-      const botMsgHTML = `
-        <div class="chat-bubble received">
-          ${botResponse}
-          <span class="bubble-time">${getCurrentTimeFormatted()}</span>
-        </div>
-      `;
-      dom.chatMessagesContainer.insertAdjacentHTML('beforeend', botMsgHTML);
-      scrollToChatBottom();
-      playSystemSound();
-    }, 1500);
-  }
-
-  function scrollToChatBottom() {
-    dom.chatMessagesContainer.scrollTop = dom.chatMessagesContainer.scrollHeight;
-  }
-
-  function getBotSimulatedResponse(userText, subject) {
-    const textLower = userText.toLowerCase();
-
-    if (subject.includes('Motorista') || subject.includes('Viagem')) {
-      if (textLower.includes('atras') || textLower.includes('demor')) {
-        return 'Peço desculpas pelo atraso! O trânsito está pesado agora. Já avisei o motorista para priorizar sua viagem.';
-      }
-      if (textLower.includes('cancel') || textLower.includes('desist')) {
-        return 'Você pode cancelar clicando em "Cancelar Corrida" no rodapé, sem taxas caso o faça rapidamente.';
-      }
-      return 'O motorista está a caminho do ponto de embarque seguindo o mapa.';
-    }
-
-    if (subject.includes('Pagamento') || subject.includes('Cobrança')) {
-      if (textLower.includes('cartao') || textLower.includes('adicion')) {
-        return 'Para adicionar um cartão, vá no Perfil -> Métodos de Pagamento -> "Adicionar Novo Cartão". Aceitamos Visa, Mastercard e Amex!';
-      }
-      if (textLower.includes('duplo') || textLower.includes('cobrou')) {
-        return 'Isto costuma ser apenas uma pré-autorização bancária temporária que será estornada automaticamente em breve.';
-      }
-      return 'Todos os pagamentos são descontados de forma segura do seu cartão padrão salvo.';
-    }
-
-    if (textLower.includes('ola') || textLower.includes('oi') || textLower.includes('bom dia')) {
-      return `Olá, ${escapeHtml(AppState.activeUser.name)}! 😊 Como posso te ajudar na central de ajuda hoje?`;
-    }
-
-    return 'Entendido. Abri um protocolo de atendimento interno. Nossa equipe humana entrará em contato em breve!';
-  }
 
   /* secao
  * 16 fluxo de login e cadastro real persistente no banco de dados
