@@ -1,23 +1,46 @@
 package com.motohelp.app;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private String pendingOAuthUrl = null;
+    private static final int PERMISSION_REQUEST_CODE = 1001;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
+
+        // Pede GPS e câmera ao abrir o app, para o mapa, o SOS e o leitor de QR
+        // funcionarem na primeira vez. O WebChromeClient do Capacitor é mantido.
+        requestAppPermissions();
+
         // Registrar a interface de banco de dados do SQLite no WebView
         if (this.bridge != null && this.bridge.getWebView() != null) {
             this.bridge.getWebView().addJavascriptInterface(new DatabaseBridge(this), "AndroidDatabase");
         }
 
         handleIntent(getIntent());
+    }
+
+    private void requestAppPermissions() {
+        String[] permissions = new String[]{
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.CAMERA
+        };
+        for (String perm : permissions) {
+            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
+                return;
+            }
+        }
     }
 
     @Override
