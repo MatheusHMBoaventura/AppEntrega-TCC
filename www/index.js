@@ -3013,10 +3013,57 @@ secao */
       btn.classList.add('active');
       currentSosFilter = btn.getAttribute('data-cat') || 'all';
       filterAndRenderSosList();
+      renderSosGoogleLinks();
     }
   });
 
   let currentSosPlaces = [];
+
+  /*
+   Contingência do SOS: abre a mesma busca no Google Maps, centrada na posição
+   do entregador. Não usa chave de API: é um link para o app/site do Google Maps.
+  */
+  const SOS_GOOGLE_QUERIES = {
+    fuel: { label: 'Postos', emoji: '⛽', query: 'posto de gasolina' },
+    tyres: { label: 'Borracharias', emoji: '🛞', query: 'borracharia' },
+    motorcycle_repair: { label: 'Oficinas de moto', emoji: '🏍️', query: 'oficina de moto' },
+    car_repair: { label: 'Mecânicas', emoji: '🔧', query: 'oficina mecânica' },
+    auto_parts: { label: 'Autopeças', emoji: '⚙️', query: 'autopeças' }
+  };
+  let sosGoogleCenter = null;
+
+  function googleMapsSearchUrl(query, lat, lng) {
+    const q = encodeURIComponent(query);
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      // zoom 14 cobre aproximadamente o raio de 5 km ao redor do entregador
+      return `https://www.google.com/maps/search/${q}/@${lat.toFixed(6)},${lng.toFixed(6)},14z`;
+    }
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query + ' perto de mim')}`;
+  }
+
+  function renderSosGoogleLinks() {
+    const box = document.getElementById('sos-google-links');
+    if (!box) return;
+    const keys = currentSosFilter && currentSosFilter !== 'all' && SOS_GOOGLE_QUERIES[currentSosFilter]
+      ? [currentSosFilter]
+      : ['fuel', 'tyres', 'motorcycle_repair'];
+    const lat = sosGoogleCenter ? sosGoogleCenter.lat : undefined;
+    const lng = sosGoogleCenter ? sosGoogleCenter.lng : undefined;
+    box.innerHTML = `
+      <span style="font-size:0.72rem; color:var(--color-text-muted, #64748b); font-weight:700; display:block; margin-bottom:6px;">
+        <i class="fa-brands fa-google"></i> Não achou o que precisa? Pesquise no Google Maps:
+      </span>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        ${keys.map(k => {
+          const c = SOS_GOOGLE_QUERIES[k];
+          return `<a class="btn-sos-google" data-cat="${k}" href="${googleMapsSearchUrl(c.query, lat, lng)}" target="_blank" rel="noopener"
+                     style="flex:1 1 30%; text-align:center; text-decoration:none; background:#f8fafc; border:1px solid #e2e8f0; color:#334155; border-radius:10px; padding:8px 6px; font-size:0.74rem; font-weight:700;">
+                    ${c.emoji} ${c.label}
+                  </a>`;
+        }).join('')}
+      </div>
+    `;
+  }
 
   function filterAndRenderSosList() {
     const listElem = document.getElementById('sos-merchants-list');
@@ -3041,7 +3088,7 @@ secao */
         <div style="text-align:center; padding:25px 15px; color:#94a3b8; background:rgba(0,0,0,0.02); border-radius:12px; border:1px dashed #cbd5e1;">
           <i class="fa-solid fa-map-location-dot" style="margin-bottom:8px; display:block; font-size:2rem; color:#f59e0b;"></i>
           <strong style="color:#475569; display:block; margin-bottom:4px;">Nenhum ${label} encontrado em até 5 km</strong>
-          <span style="font-size:0.75rem;">Não há registros desta categoria no OpenStreetMap próximos à sua localização atual.</span>
+          <span style="font-size:0.75rem;">Não há registros desta categoria no OpenStreetMap perto de você. Tente a busca no Google Maps abaixo.</span>
         </div>
       `;
       return;
@@ -3171,6 +3218,9 @@ secao */
     const cacheInfo = document.getElementById('sos-cache-info');
     if (!listElem) return;
 
+    sosGoogleCenter = null;
+    renderSosGoogleLinks();
+
     listElem.innerHTML = '<div style="text-align:center; padding:25px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin" style="font-size:1.4rem; margin-bottom:8px; display:block;"></i>Consultando estabelecimentos reais via OpenStreetMap (raio de 5 km)...</div>';
 
     // REGRA MANDATÓRIA RF09/RN06: Aguardar GPS REAL confirmado antes de consultar
@@ -3208,6 +3258,8 @@ secao */
     if (gpsInfo) {
       gpsInfo.innerHTML = `<i class="fa-solid fa-location-dot" style="color:#10b981;"></i> GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)} (Raio de 5 km)`;
     }
+    sosGoogleCenter = { lat, lng };
+    renderSosGoogleLinks();
 
     try {
       // Consulta real nos 3 servidores Overpass com bounding box e Haversine 5 km
@@ -3245,7 +3297,7 @@ secao */
         <div style="text-align:center; padding:25px 15px; color:#475569; background:#f1f5f9; border-radius:12px; border:1px solid #cbd5e1;">
           <i class="fa-solid fa-wifi-slash" style="font-size:2rem; margin-bottom:8px; display:block; color:#64748b;"></i>
           <strong style="display:block; margin-bottom:4px;">A busca de estabelecimentos exige conexão com a internet</strong>
-          <span style="font-size:0.75rem; color:#64748b;">Não foi possível contactar os servidores OpenStreetMap/Overpass no momento. Verifique sua conexão e tente novamente.</span>
+          <span style="font-size:0.75rem; color:#64748b;">Não foi possível contactar os servidores OpenStreetMap/Overpass no momento. Use os atalhos do Google Maps abaixo ou tente novamente.</span>
         </div>
       `;
     }
