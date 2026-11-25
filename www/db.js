@@ -601,7 +601,10 @@ class LocalSQLiteManager {
       if (merchantRes.rows.length > 0) extraData = merchantRes.rows.item(0);
     }
 
-    return { ...user, ...extraData };
+    // o id do usuário prevalece sobre o id da linha de delivery_drivers/merchants
+    const merged = { ...extraData, ...user };
+    delete merged.user_id;
+    return merged;
   }
 
   async checkUserByEmail(email) {
@@ -1099,78 +1102,74 @@ class UnifiedDatabaseManager {
       if (error) throw error;
       if (!data.user) throw new Error('E-mail ou senha incorretos.');
 
-      // busca perfil público do PostgreSQL (tabela users não armazena senha)
-      const { data: profile, error: profileErr } = await this.supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-      if (profileErr || !profile) {
-        return {
-          id: data.user.id,
-          name: data.user.user_metadata?.name || 'Usuário Supabase',
-          email: data.user.email,
-          phone: data.user.user_metadata?.phone || '',
-          user_type: data.user.user_metadata?.user_type || 'entregador',
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
-        };
-      }
-
-      let extraData = {};
-      if (profile.user_type === 'entregador') {
-        const { data: driverData } = await this.supabase.from('delivery_drivers').select('*').eq('user_id', profile.id).single();
-        if (driverData) extraData = driverData;
-      } else if (profile.user_type === 'lojista') {
-        const { data: merchantData } = await this.supabase.from('merchants').select('*').eq('user_id', profile.id).single();
-        if (merchantData) extraData = merchantData;
-      }
-
-      const safeProfile = { ...profile, ...extraData };
-      delete safeProfile.password;
-      return safeProfile;
+      // perfil público do PostgreSQL (a tabela users não armazena senha)
+      const profile = await this.loadFullProfile(data.user.id);
+      if (profile) return profile;
+      return {
+        id: data.user.id,
+        name: data.user.user_metadata?.name || 'Usuário Supabase',
+        email: data.user.email,
+        phone: data.user.user_metadata?.phone || '',
+        user_type: data.user.user_metadata?.user_type || 'entregador',
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
+      };
     } else {
       console.log('[SQLite Fallback §7.5] Autenticando com SQLite local protegido por hash SHA-256');
       return await this.sqlite.loginUser(email, password);
     }
   }
 
+  /*
+   Perfil completo: public.users + delivery_drivers ou merchants.
+   O id sempre é o UUID do usuário (antes, o id da linha de delivery_drivers
+   ou merchants sobrescrevia o do usuário e quebrava aceite e criação de pedidos).
+  */
+  async loadFullProfile(userId) {
+    const { data: profile, error } = await this.supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!profile) return null;
+
+    const type = profile.user_type || 'entregador';
+    let extra = null;
+    if (type === 'entregador') {
+      const { data } = await this.supabase.from('delivery_drivers').select('*').eq('user_id', userId).maybeSingle();
+      extra = data;
+    } else if (type === 'lojista') {
+      const { data } = await this.supabase.from('merchants').select('*').eq('user_id', userId).maybeSingle();
+      extra = data;
+    }
+
+    const merged = { ...(extra || {}), ...profile, user_type: type };
+    if (extra) merged.role_record_id = extra.id;
+    delete merged.user_id;
+    delete merged.password;
+    return merged;
+  }
+
   async getProfileOrFallback(authUser) {
     if (!authUser) return null;
+    const meta = authUser.user_metadata || {};
+    const fallback = {
+      id: authUser.id,
+      name: meta.full_name || meta.name || 'Piloto Google',
+      email: authUser.email,
+      phone: authUser.phone || '',
+      user_type: 'entregador',
+      avatar: meta.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
+    };
     try {
-      const { data: profile } = await this.supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle();
-
-      if (profile) return { ...profile, user_type: profile.user_type || 'entregador' };
-
-      // Se nao existir perfil na tabela users (ex: primeira vez logando via Google OAuth)
-      const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Piloto Google';
-      const email = authUser.email;
-      const avatar = authUser.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150';
-
-      const baseUserData = {
-        id: authUser.id,
-        name: name,
-        email: email,
-        phone: authUser.phone || '',
-        avatar: avatar
-      };
-
-      await this.supabase.from('users').insert(baseUserData);
-      return { ...baseUserData, user_type: 'entregador' };
+      // O trigger handle_new_user (migration 005) cria o perfil no primeiro login social
+      const profile = await this.loadFullProfile(authUser.id);
+      if (profile) return profile;
+      console.warn('Perfil ainda não existe em public.users; verifique se a migration 005 foi aplicada.');
+      return fallback;
     } catch (e) {
-      console.warn('Aviso ao obter perfil social do Supabase:', e);
-      return {
-        id: authUser.id,
-        name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Piloto Google',
-        email: authUser.email,
-        phone: '',
-        user_type: 'entregador',
-        avatar: authUser.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
-      };
+      console.warn('Aviso ao obter perfil do Supabase:', e);
+      return fallback;
     }
   }
 
@@ -1194,9 +1193,10 @@ class UnifiedDatabaseManager {
           .update({ vehicle_plate: vehiclePlate, cpf, cnh })
           .eq('user_id', userId);
         if (error) throw error;
-        return { user_id: userId, vehicle_plate: vehiclePlate, cpf, cnh };
+        return { vehicle_plate: vehiclePlate, cpf, cnh };
       } catch (e) {
-        console.warn('Erro ao atualizar documentos no supabase, usando sqlite:', e);
+        console.warn('Erro ao atualizar documentos no Supabase:', e);
+        throw new Error('Não foi possível salvar os documentos na nuvem. Verifique a conexão e tente novamente.');
       }
     }
     return await this.sqlite.updateDriverDocuments(userId, cpf, vehiclePlate, cnh);
@@ -1205,6 +1205,11 @@ class UnifiedDatabaseManager {
   async updateUserProfile(userId, name, email, phone, avatar) {
     if (this.isSupabaseMode) {
       console.log(`atualizando perfil ${userId}`);
+      const { data: authData } = await this.supabase.auth.getUser();
+      const authEmail = authData && authData.user ? authData.user.email : null;
+      if (authEmail && String(email || '').trim().toLowerCase() !== String(authEmail).toLowerCase()) {
+        throw new Error('O e-mail de login não pode ser alterado por aqui no modo nuvem.');
+      }
       const { error } = await this.supabase
           .from('users')
           .update({ name, email, phone, avatar })
