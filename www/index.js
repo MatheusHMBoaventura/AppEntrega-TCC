@@ -1602,6 +1602,8 @@ secao */
       // 7. Exibir tela/modal de conferência com dados da entrega
       qrPendingOrder = order;
       renderAndShowQrConfirmModal(order);
+      // Libera novas leituras; a confirmação segue no modal
+      qrProcessing = false;
 
     } catch (err) {
       console.error('Erro na validação do QR Code:', err);
@@ -3032,6 +3034,24 @@ secao */
   };
   let sosGoogleCenter = null;
 
+  // Bairro e cidade do entregador para o cabeçalho do SOS (Nominatim reverse)
+  async function getUserPlaceLabel(lat, lng) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=pt-BR`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) return null;
+      const addr = (await res.json()).address || {};
+      const suburb = addr.suburb || addr.neighbourhood || addr.city_district || '';
+      const city = addr.city || addr.town || addr.municipality || addr.village || '';
+      const label = [suburb, city].filter(Boolean).join(', ');
+      return label || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function googleMapsSearchUrl(query, lat, lng) {
     const q = encodeURIComponent(query);
     if (typeof lat === 'number' && typeof lng === 'number') {
@@ -3098,8 +3118,11 @@ secao */
     listElem.innerHTML = filtered.map((m, idx) => {
       const rawPhone = (m.phone || '').replace(/\D/g, '');
       const hasPhone = rawPhone.length >= 8;
-      const cleanPhone = hasPhone ? (rawPhone.length === 11 ? `55${rawPhone}` : rawPhone) : '';
-      const displayPhone = hasPhone ? (rawPhone.length === 11 ? `(${rawPhone.slice(0,2)}) ${rawPhone.slice(2,7)}-${rawPhone.slice(7)}` : rawPhone) : null;
+      const cleanPhone = hasPhone ? (rawPhone.startsWith('55') && rawPhone.length > 11 ? rawPhone : `55${rawPhone}`) : '';
+      const displayPhone = !hasPhone ? null
+        : rawPhone.length === 11 ? `(${rawPhone.slice(0,2)}) ${rawPhone.slice(2,7)}-${rawPhone.slice(7)}`
+        : rawPhone.length === 10 ? `(${rawPhone.slice(0,2)}) ${rawPhone.slice(2,6)}-${rawPhone.slice(6)}`
+        : rawPhone;
       const distLabel = m.distKm != null ? `<span style="color:#f59e0b; font-weight:700;"><i class="fa-solid fa-route"></i> ${m.distKm < 1 ? Math.round(m.distKm * 1000) + ' m' : m.distKm.toFixed(1) + ' km'}</span>` : '';
 
       const typeIcon = m.type === 'fuel' ? 'fa-gas-pump' :
@@ -3260,6 +3283,11 @@ secao */
     }
     sosGoogleCenter = { lat, lng };
     renderSosGoogleLinks();
+    getUserPlaceLabel(lat, lng).then(label => {
+      if (label && gpsInfo) {
+        gpsInfo.innerHTML = `<i class="fa-solid fa-location-dot" style="color:#10b981;"></i> ${escapeHtml(label)} (raio de 5 km)`;
+      }
+    });
 
     try {
       // Consulta real nos 3 servidores Overpass com bounding box e Haversine 5 km

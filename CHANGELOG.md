@@ -115,6 +115,8 @@ AppEntrega-TCC/
 - Documentos do entregador não caem mais no banco local quando a nuvem falha: o app mostra o erro.
 - Editar o perfil não apaga mais o tipo de usuário da sessão; o e-mail de login não é alterado pela tela de perfil no modo nuvem.
 - Evitado login duplicado quando o login por senha dispara o evento `SIGNED_IN`.
+- Android: o app pede as permissões de GPS e câmera ao abrir (aproveitado da versão do Vitor, mantendo o WebChromeClient do Capacitor).
+- SOS mostra o bairro e a cidade do entregador e formata telefones fixos de 10 dígitos; o leitor de QR libera novas leituras depois de abrir a confirmação.
 - SOS: atalhos "Pesquise no Google Maps" (postos, borracharias, oficinas de moto) centrados no GPS do entregador, como contingência quando o Overpass falha ou não encontra nada. Não usa chave de API.
 - Removido o chat de suporte simulado (respostas fixas de bot) e o contato fictício 0800; a aba Ajuda mantém só as orientações. Texto de privacidade reescrito para o contexto de entregas.
 
