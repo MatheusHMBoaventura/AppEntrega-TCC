@@ -4,9 +4,12 @@
 */
 
 /* ==========================================================================
-   Criptografia e Hashing Seguro de Senhas (§7.5 - Resolução de Divergência)
-   Garante que nenhuma senha seja armazenada ou comparada em texto puro.
-   Utiliza Web Crypto API (SHA-256) nativa com fallback em JavaScript puro.
+   Armazenamento de senhas no banco LOCAL de contingência
+   - Nuvem: a senha é tratada pelo Supabase Auth (bcrypt), nunca por este código.
+   - Local: PBKDF2-HMAC-SHA256 com salt aleatório de 16 bytes e 100.000 iterações
+     (Web Crypto API). Formato gravado: pbkdf2$<iteracoes>$<salt hex>$<hash hex>.
+   - Hashes legados (SHA-256 puro ou texto puro) são aceitos uma única vez no
+     login e regravados no formato PBKDF2.
    ========================================================================== */
 
 function sha256Pure(ascii) {
@@ -83,33 +86,116 @@ function sha256Pure(ascii) {
   return result;
 }
 
+const PBKDF2_ITERATIONS = 100000;
+const FALLBACK_ITERATIONS = 2000;
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomHex(nBytes) {
+  const arr = new Uint8Array(nBytes);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < nBytes; i++) arr[i] = Math.floor(Math.random() * 256);
+  }
+  return bytesToHex(arr);
+}
+
+function hasWebCrypto() {
+  return typeof crypto !== 'undefined' && !!crypto.subtle && typeof TextEncoder !== 'undefined';
+}
+
+// SHA-256 simples (sem salt): usado APENAS para reconhecer hashes legados
+async function legacySha256(plain) {
+  const str = String(plain);
+  if (hasWebCrypto()) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return bytesToHex(new Uint8Array(buf));
+  }
+  return sha256Pure(unescape(encodeURIComponent(str))).toLowerCase();
+}
+
+async function pbkdf2Hex(plain, saltHex, iterations) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(String(plain)), 'PBKDF2', false, ['deriveBits']);
+  const salt = new Uint8Array(saltHex.match(/.{2}/g).map(h => parseInt(h, 16)));
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, keyMaterial, 256);
+  return bytesToHex(new Uint8Array(bits));
+}
+
+// Fallback para WebViews sem Web Crypto: SHA-256 iterado com salt
+function iteratedSha256Hex(plain, saltHex, iterations) {
+  let h = sha256Pure(unescape(encodeURIComponent(saltHex + ':' + String(plain)))).toLowerCase();
+  for (let i = 1; i < iterations; i++) h = sha256Pure(saltHex + h).toLowerCase();
+  return h;
+}
+
+/* Gera o hash para gravação. Nunca aceita um hash pronto como entrada. */
 async function hashPassword(plainPassword) {
-  if (!plainPassword) return '';
-  const str = String(plainPassword).trim();
-  // Se a string já corresponder a um hash SHA-256 de 64 caracteres hexadecimais, mantém
-  if (/^[a-f0-9]{64}$/i.test(str)) {
-    return str.toLowerCase();
-  }
-
-  // Tenta usar a Web Crypto API nativa do navegador/WebView
-  if (typeof crypto !== 'undefined' && crypto.subtle && typeof TextEncoder !== 'undefined') {
+  const plain = String(plainPassword || '');
+  if (!plain) return '';
+  const salt = randomHex(16);
+  if (hasWebCrypto()) {
     try {
-      const msgBuffer = new TextEncoder().encode(str);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
-    } catch (_) {
-      // fallback abaixo
+      return 'pbkdf2$' + PBKDF2_ITERATIONS + '$' + salt + '$' + (await pbkdf2Hex(plain, salt, PBKDF2_ITERATIONS));
+    } catch (_) { /* cai no fallback */ }
+  }
+  return 's256i$' + FALLBACK_ITERATIONS + '$' + salt + '$' + iteratedSha256Hex(plain, salt, FALLBACK_ITERATIONS);
+}
+
+function constantTimeEqual(a, b) {
+  a = String(a); b = String(b);
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/*
+ Verifica a senha digitada contra o valor gravado.
+ Retorna { ok, needsUpgrade }: needsUpgrade indica formato legado a ser regravado.
+*/
+async function verifyPassword(plainPassword, stored) {
+  const plain = String(plainPassword || '');
+  const value = String(stored || '');
+  if (!plain || !value) return { ok: false, needsUpgrade: false };
+
+  const parts = value.split('$');
+  if (parts.length === 4 && (parts[0] === 'pbkdf2' || parts[0] === 's256i')) {
+    const iterations = parseInt(parts[1], 10);
+    const salt = parts[2];
+    let computed;
+    if (parts[0] === 'pbkdf2') {
+      if (!hasWebCrypto()) return { ok: false, needsUpgrade: false };
+      computed = await pbkdf2Hex(plain, salt, iterations);
+    } else {
+      computed = iteratedSha256Hex(plain, salt, iterations);
     }
+    return { ok: constantTimeEqual(computed, parts[3]), needsUpgrade: false };
   }
 
-  // Fallback seguro em JavaScript puro com suporte a UTF-8
-  try {
-    const utf8Str = unescape(encodeURIComponent(str));
-    return sha256Pure(utf8Str).toLowerCase();
-  } catch (_) {
-    return sha256Pure(str).toLowerCase();
+  // Legado: SHA-256 sem salt (versão 2.0.0)
+  if (/^[a-f0-9]{64}$/i.test(value)) {
+    return { ok: constantTimeEqual(await legacySha256(plain), value.toLowerCase()), needsUpgrade: true };
   }
+
+  // Legado: texto puro (versões anteriores à 2.0.0)
+  return { ok: constantTimeEqual(plain, value), needsUpgrade: true };
+}
+
+/* Código de entrega imprevisível (antes: 5 dígitos de Math.random) */
+function generateDeliveryCode() {
+  const arr = new Uint32Array(2);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(arr);
+  } else {
+    arr[0] = Math.random() * 1e9;
+    arr[1] = Math.random() * 1e9;
+  }
+  const digits = (String(arr[0]) + String(arr[1])).padEnd(10, '0').slice(0, 10);
+  return 'ENT-' + digits;
 }
 
 /*
@@ -275,10 +361,14 @@ class LocalSQLiteManager {
       const allUsers = await this.query('SELECT id, email, password FROM users');
       const list = allUsers.rows ? (allUsers.rows.toArray ? allUsers.rows.toArray() : Array.from({ length: allUsers.rows.length }, (_, i) => allUsers.rows.item(i))) : [];
       for (const u of list) {
-        if (u.password && (!/^[a-f0-9]{64}$/i.test(String(u.password).trim()))) {
-          const hashed = await hashPassword(u.password);
+        const value = String(u.password || '').trim();
+        const isHashed = /^(pbkdf2|s256i)\$/.test(value) || /^[a-f0-9]{64}$/i.test(value);
+        if (value && !isHashed) {
+          // Texto puro legado: grava direto em PBKDF2. Hashes SHA-256 legados são
+          // regravados no próximo login, quando a senha digitada estiver disponível.
+          const hashed = await hashPassword(value);
           await this.query('UPDATE users SET password = ? WHERE id = ?', [hashed, u.id]);
-          console.log(`[Segurança §7.5] Senha legada do usuário ${u.email} migrada para hash SHA-256.`);
+          console.log(`[Segurança] Senha em texto puro do usuário ${u.email} migrada para PBKDF2.`);
         }
       }
     } catch (e) {
@@ -287,7 +377,8 @@ class LocalSQLiteManager {
   }
 
   async seedDefaultData() {
-    // Hash SHA-256 da senha padrão '123456' (§7.5 - Armazenamento seguro de senhas)
+    // Contas de DEMONSTRAÇÃO do modo local (senha 123456). São criadas apenas uma vez
+    // e não têm a senha redefinida a cada abertura do app. Não existem no Supabase.
     const passwordHash123456 = await hashPassword('123456');
 
     // garante que o usuario padrao joao silva (entregador moto) exista e tenha o hash da senha
@@ -337,9 +428,6 @@ class LocalSQLiteManager {
       for (const place of mockPlaces) {
         await this.query('INSERT INTO places (user_id, type, title, address, lat, lng) VALUES (?, ?, ?, ?, ?, ?)', place);
       }
-    } else {
-      // atualiza a senha para hash seguro SHA-256
-      await this.query('UPDATE users SET password = ? WHERE email = ?', [passwordHash123456, 'joao@email.com']);
     }
 
     // garante que o usuario matheus (lojista) para testes locais seja semeado
@@ -362,8 +450,6 @@ class LocalSQLiteManager {
         'INSERT INTO merchants (user_id, store_name, cnpj_cpf, category, address) VALUES (?, ?, ?, ?, ?)',
         [matheusId, 'Pizzaria do Matheus', '12.345.678/0001-99', 'Restaurante', 'Av. Paulista, 2000 - Bela Vista']
       );
-    } else {
-      await this.query('UPDATE users SET password = ? WHERE email = ?', [passwordHash123456, 'matheus@email.com']);
     }
 
     // garante que o socorro emergencial (borracharia/oficina) seja semeado para o SOS
@@ -386,8 +472,6 @@ class LocalSQLiteManager {
         'INSERT INTO merchants (user_id, store_name, cnpj_cpf, category, address) VALUES (?, ?, ?, ?, ?)',
         [bId, 'Borracharia & AutoPeças Express 24h', '33.221.100/0001-44', 'Borracharia / Auto Peças', 'Av. Santo Amaro, 800 - Itaim Bibi']
       );
-    } else {
-      await this.query('UPDATE users SET password = ? WHERE email = ?', [passwordHash123456, 'borracharia@email.com']);
     }
 
     // garante que pedidos/fretes iniciais estejam semeados para o portal de oportunidades
@@ -460,7 +544,7 @@ class LocalSQLiteManager {
     const avatarDefault = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150';
     const type = userType || 'entregador';
     // Hash criptográfico SHA-256 (§7.5 - Nenhuma senha gravada em texto puro)
-    const passwordHash = await hashPassword(password);
+    const passwordHash = await hashPassword(String(password || '').trim());
 
     const res = await this.query(
       'INSERT INTO users (name, email, phone, password, user_type, avatar) VALUES (?, ?, ?, ?, ?, ?)',
@@ -484,11 +568,6 @@ class LocalSQLiteManager {
       extraData = { store_name: storeName, cnpj_cpf: cnpjCpf, category, address: storeAddress };
     }
 
-    await this.query(
-      'INSERT INTO places (user_id, type, title, address, lat, lng) VALUES (?, ?, ?, ?, ?, ?)',
-      [newUserId, 'home', 'Casa', 'Av. Paulista, 2000 - Bela Vista', -23.5596, -46.6583]
-    );
-
     return { id: newUserId, name, email, phone, user_type: type, avatar: avatarDefault, ...extraData };
   }
 
@@ -497,19 +576,15 @@ class LocalSQLiteManager {
     const cleanPass = String(password || '').trim();
     if (!cleanEmail || !cleanPass) throw new Error('E-mail e senha são obrigatórios.');
 
-    // Cálculo do hash SHA-256 para comparação segura (§7.5)
-    const passHash = await hashPassword(cleanPass);
+    const res = await this.query('SELECT * FROM users WHERE email = ?', [cleanEmail]);
+    const stored = res.rows.length > 0 ? res.rows.item(0).password : null;
+    const check = await verifyPassword(cleanPass, stored);
+    if (!check.ok) throw new Error('E-mail ou senha incorretos.');
 
-    let res = await this.query('SELECT * FROM users WHERE email = ? AND password = ?', [cleanEmail, passHash]);
-    
-    // Migração transparente caso a base local possua senha legada em texto puro
-    if (res.rows.length === 0) {
-      const legacyCheck = await this.query('SELECT * FROM users WHERE email = ? AND password = ?', [cleanEmail, cleanPass]);
-      if (legacyCheck.rows.length > 0) {
-        await this.query('UPDATE users SET password = ? WHERE email = ?', [passHash, cleanEmail]);
-        res = legacyCheck;
-        console.log(`[Segurança §7.5] Senha legada do usuário ${cleanEmail} migrada com sucesso para hash SHA-256.`);
-      }
+    if (check.needsUpgrade) {
+      const upgraded = await hashPassword(cleanPass);
+      await this.query('UPDATE users SET password = ? WHERE email = ?', [upgraded, cleanEmail]);
+      console.log(`[Segurança] Senha legada do usuário ${cleanEmail} regravada em PBKDF2.`);
     }
 
     if (res.rows.length === 0) throw new Error('E-mail ou senha incorretos.');
@@ -631,7 +706,7 @@ class LocalSQLiteManager {
 
   async getOrderByQrCode(qrCode) {
     if (!qrCode) return null;
-    const clean = String(qrCode).trim();
+    const clean = String(qrCode).trim().toUpperCase();
     const res = await this.query('SELECT * FROM orders WHERE qr_code = ?', [clean]);
     if (res.rows && res.rows.length > 0) {
       return res.rows.item(0);
@@ -662,7 +737,7 @@ class LocalSQLiteManager {
   async createOrder(orderData) {
     const { merchant_id, store_name, pickup_address, delivery_address, customer_name, customer_phone, package_details, price, lat, lng, qr_code } = orderData;
     const now = new Date().toLocaleString('pt-BR');
-    const code = qr_code || `ENT-${Math.floor(10000 + Math.random() * 90000)}`;
+    const code = qr_code || generateDeliveryCode();
     const res = await this.query(
       'INSERT INTO orders (merchant_id, driver_id, store_name, pickup_address, delivery_address, customer_name, customer_phone, package_details, price, lat, lng, qr_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [String(merchant_id || ''), '', store_name || 'Loja Parceira', pickup_address || '', delivery_address || '', customer_name || 'Cliente', customer_phone || '', package_details || 'Pacote Padrão', price || 'R$ 15,00', parseFloat(lat) || -23.56, parseFloat(lng) || -46.65, code, 'available', now]
@@ -671,12 +746,32 @@ class LocalSQLiteManager {
   }
 
   async acceptOrder(orderId, driverId) {
+    // RN03: só aceita pedido ainda disponível e sem entregador
+    const cur = await this.query('SELECT * FROM orders WHERE id = ?', [String(orderId)]);
+    const order = cur.rows.length > 0 ? cur.rows.item(0) : null;
+    if (!order) throw new Error('Pedido não encontrado.');
+    if (order.status !== 'available' || (order.driver_id && String(order.driver_id).trim() !== '')) {
+      throw new Error('Este frete já foi aceito por outro entregador.');
+    }
     await this.query('UPDATE orders SET status = ?, driver_id = ? WHERE id = ?', ['in_transit', String(driverId), String(orderId)]);
     const res = await this.query('SELECT * FROM orders WHERE id = ?', [String(orderId)]);
     return res.rows.length > 0 ? res.rows.item(0) : null;
   }
 
-  async completeOrder(orderId, driverId) {
+  async completeOrder(orderId, driverId, qrCode) {
+    // RN02: só conclui com o QR Code correto, pelo entregador atribuído, a partir de "em trânsito"
+    const cur = await this.query('SELECT * FROM orders WHERE id = ?', [String(orderId)]);
+    const current = cur.rows.length > 0 ? cur.rows.item(0) : null;
+    if (!current) throw new Error('Pedido não encontrado.');
+    if (String(current.qr_code || '').toUpperCase() !== String(qrCode || '').trim().toUpperCase()) {
+      throw new Error('O QR Code não corresponde a este pedido.');
+    }
+    if (String(current.driver_id || '') !== String(driverId)) {
+      throw new Error('Este pedido não está atribuído a você.');
+    }
+    if (!['in_transit', 'accepted'].includes(current.status)) {
+      throw new Error(`O pedido não pode ser concluído no status atual (${current.status}).`);
+    }
     const now = new Date().toLocaleString('pt-BR');
     await this.query('UPDATE orders SET status = ?, delivered_at = ? WHERE id = ?', ['delivered', now, String(orderId)]);
     const res = await this.query('SELECT * FROM orders WHERE id = ?', [String(orderId)]);
@@ -933,10 +1028,19 @@ class UnifiedDatabaseManager {
         email: email,
         password: password,
         options: {
+          // Metadados usados pelo trigger handle_new_user (migration 005) para criar
+          // o perfil em public.users e em delivery_drivers/merchants no servidor.
           data: {
             name: name,
             phone: phone,
-            user_type: type
+            user_type: type,
+            cpf: cpf || '',
+            vehicle_plate: vehiclePlate || '',
+            cnh: cnh || '',
+            store_name: storeName || '',
+            cnpj_cpf: cnpjCpf || '',
+            category: category || 'Outros',
+            store_address: storeAddress || ''
           }
         }
       });
@@ -947,63 +1051,34 @@ class UnifiedDatabaseManager {
       const newUserId = data.user.id;
       const avatarDefault = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150';
 
-      // cria perfil publico na tabela users no postgresql
-      const baseUserData = {
-        id: newUserId,
-        name: name,
-        email: email,
-        phone: phone,
-        avatar: avatarDefault
-      };
+      const extraData = type === 'entregador'
+        ? { cpf, vehicle_type: 'Moto', vehicle_plate: vehiclePlate, cnh }
+        : { store_name: storeName, cnpj_cpf: cnpjCpf, category, address: storeAddress };
 
-      let { error: profileError } = await this.supabase.from('users').insert({
-        ...baseUserData,
-        user_type: type
-      });
+      // O perfil é criado no servidor pelo trigger handle_new_user (migration 005).
+      // Se houver sessão (confirmação de e-mail desligada) e o trigger ainda não
+      // existir no projeto, cria pelo cliente como contingência, sem duplicar.
+      if (data.session) {
+        const { data: existing } = await this.supabase.from('users').select('id').eq('id', newUserId).maybeSingle();
+        if (!existing) {
+          const { error: profileError } = await this.supabase.from('users').insert({
+            id: newUserId, name, email, phone, avatar: avatarDefault, user_type: type
+          });
+          if (profileError) console.warn('Aviso na tabela users do Supabase:', profileError.message);
 
-      // Fallback caso a tabela users nao possua a coluna user_type
-      if (profileError && profileError.message && profileError.message.includes('user_type')) {
-        console.warn('Coluna user_type nao existe na tabela users, inserindo sem ela...');
-        const retryResult = await this.supabase.from('users').insert(baseUserData);
-        profileError = retryResult.error;
+          if (type === 'entregador') {
+            const { error: driverErr } = await this.supabase.from('delivery_drivers').insert({
+              user_id: newUserId, cpf: cpf || '', vehicle_type: 'Moto', vehicle_plate: vehiclePlate || '', cnh: cnh || ''
+            });
+            if (driverErr) console.warn('Aviso: falha ao inserir entregador no Supabase:', driverErr.message);
+          } else if (type === 'lojista') {
+            const { error: merchantErr } = await this.supabase.from('merchants').insert({
+              user_id: newUserId, store_name: storeName || '', cnpj_cpf: cnpjCpf || '', category: category || 'Outros', address: storeAddress || ''
+            });
+            if (merchantErr) console.warn('Aviso: falha ao inserir lojista no Supabase:', merchantErr.message);
+          }
+        }
       }
-
-      if (profileError) {
-        console.warn('Aviso na tabela users do Supabase:', profileError.message);
-      }
-
-      let extraData = {};
-      if (type === 'entregador') {
-        const { error: driverErr } = await this.supabase.from('delivery_drivers').insert({
-          user_id: newUserId,
-          cpf: cpf || '',
-          vehicle_type: 'Moto',
-          vehicle_plate: vehiclePlate || '',
-          cnh: cnh || ''
-        });
-        if (driverErr) console.warn('Aviso: falha ao inserir registro de entregador no Supabase:', driverErr.message);
-        extraData = { cpf, vehicle_type: 'Moto', vehicle_plate: vehiclePlate, cnh };
-      } else if (type === 'lojista') {
-        const { error: merchantErr } = await this.supabase.from('merchants').insert({
-          user_id: newUserId,
-          store_name: storeName || '',
-          cnpj_cpf: cnpjCpf || '',
-          category: category || 'Outros',
-          address: storeAddress || ''
-        });
-        if (merchantErr) console.warn('Aviso: falha ao inserir registro de lojista no Supabase:', merchantErr.message);
-        extraData = { store_name: storeName, cnpj_cpf: cnpjCpf, category, address: storeAddress };
-      }
-
-      // configura local padrao
-      await this.supabase.from('places').insert({
-        user_id: newUserId,
-        type: 'home',
-        title: 'Casa',
-        address: 'Av. Paulista, 2000 - Bela Vista',
-        lat: -23.5596,
-        lng: -46.6583
-      });
 
       return { id: newUserId, name, email, phone, user_type: type, avatar: avatarDefault, ...extraData };
     } else {
@@ -1330,21 +1405,15 @@ class UnifiedDatabaseManager {
 
   async getOrders(status = null, merchantId = null, driverId = null) {
     if (this.isSupabaseMode) {
-      try {
-        let query = this.supabase.from('orders').select('*');
-        if (status) query = query.eq('status', status);
-        if (merchantId) query = query.eq('merchant_id', merchantId);
-        if (driverId) query = query.eq('driver_id', driverId);
-        query = query.order('id', { ascending: false });
-        const { data, error } = await query;
-        if (!error && data && data.length > 0) {
-          return data;
-        }
-      } catch (err) {
-        console.warn('Aviso: tabela orders no Supabase indisponível, usando fallback local:', err.message);
-      }
-      // Fallback seguro: se o Supabase não tiver pedidos ou tabela, carrega do SQLite local
-      return await this.sqlite.getOrders(status, merchantId, driverId);
+      // No modo nuvem, nunca mistura pedidos de demonstração do banco local
+      let query = this.supabase.from('orders').select('*');
+      if (status) query = query.eq('status', status);
+      if (merchantId) query = query.eq('merchant_id', merchantId);
+      if (driverId) query = query.eq('driver_id', driverId);
+      query = query.order('id', { ascending: false });
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
     } else {
       return await this.sqlite.getOrders(status, merchantId, driverId);
     }
@@ -1352,19 +1421,15 @@ class UnifiedDatabaseManager {
 
   async getOrderByQrCode(qrCode) {
     if (!qrCode) return null;
-    const cleanCode = String(qrCode).trim();
+    const cleanCode = String(qrCode).trim().toUpperCase();
     if (this.isSupabaseMode) {
-      try {
-        const { data, error } = await this.supabase
-          .from('orders')
-          .select('*')
-          .eq('qr_code', cleanCode)
-          .maybeSingle();
-        if (!error && data) return data;
-      } catch (err) {
-        console.warn('Aviso: busca por qr_code no Supabase falhou, consultando SQLite:', err.message);
-      }
-      return await this.sqlite.getOrderByQrCode(cleanCode);
+      const { data, error } = await this.supabase
+        .from('orders')
+        .select('*')
+        .eq('qr_code', cleanCode)
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
     } else {
       return await this.sqlite.getOrderByQrCode(cleanCode);
     }
@@ -1403,7 +1468,7 @@ class UnifiedDatabaseManager {
 
   async createOrder(orderData) {
     if (this.isSupabaseMode) {
-      const code = orderData.qr_code || `ENT-${Math.floor(10000 + Math.random() * 90000)}`;
+      const code = orderData.qr_code || generateDeliveryCode();
       const { data, error } = await this.supabase
         .from('orders')
         .insert({
@@ -1431,35 +1496,53 @@ class UnifiedDatabaseManager {
 
   async acceptOrder(orderId, driverId) {
     if (this.isSupabaseMode) {
+      // RN03: o filtro garante que só um entregador consiga aceitar
       const { data, error } = await this.supabase
         .from('orders')
         .update({ status: 'in_transit', driver_id: driverId })
         .eq('id', orderId)
-        .select()
-        .single();
+        .eq('status', 'available')
+        .is('driver_id', null)
+        .select();
       if (error) throw error;
-      return data;
+      if (!data || data.length === 0) throw new Error('Este frete já foi aceito por outro entregador.');
+      return data[0];
     } else {
       return await this.sqlite.acceptOrder(orderId, driverId);
     }
   }
 
-  async completeOrder(orderId, driverId) {
+  async completeOrder(orderId, driverId, qrCode) {
     if (this.isSupabaseMode) {
-      const { data, error } = await this.supabase
-        .from('orders')
-        .update({ status: 'delivered', delivered_at: new Date().toISOString() })
-        .eq('id', orderId)
-        .select()
-        .single();
+      // RN02 validada no servidor: função complete_order (migration 005)
+      const { data, error } = await this.supabase.rpc('complete_order', {
+        p_order_id: orderId,
+        p_qr_code: String(qrCode || '').trim().toUpperCase()
+      });
       if (error) throw error;
-      if (data) {
-        await this.addRide(driverId, `Entrega #${data.id}: ${data.store_name} -> ${data.delivery_address}`, new Date().toLocaleDateString('pt-BR'), data.price);
+      const order = Array.isArray(data) ? data[0] : data;
+      if (order) {
+        await this.addRide(driverId, `Entrega #${order.id}: ${order.store_name} -> ${order.delivery_address}`, new Date().toLocaleDateString('pt-BR'), order.price);
       }
-      return data;
+      return order;
     } else {
-      return await this.sqlite.completeOrder(orderId, driverId);
+      return await this.sqlite.completeOrder(orderId, driverId, qrCode);
     }
+  }
+
+  /* recuperação de senha */
+
+  async requestPasswordReset(email) {
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (this.isSupabaseMode) {
+      const { error } = await this.supabase.auth.resetPasswordForEmail(cleanEmail);
+      if (error) throw error;
+      return { sent: true };
+    }
+    return {
+      sent: false,
+      message: 'A recuperação de senha exige conexão com a nuvem. No modo local de contingência ela não está disponível.'
+    };
   }
 
   /* fluxos de assistencia emergencial (SOS) */

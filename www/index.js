@@ -978,9 +978,9 @@ secao */
 
         if (searchAddressResults) {
           searchAddressResults.innerHTML = results.map(r => `
-            <div class="search-result-item" data-lat="${r.lat}" data-lng="${r.lon}" data-name="${r.display_name.split(',')[0]}">
+            <div class="search-result-item" data-lat="${r.lat}" data-lng="${r.lon}" data-name="${escapeHtml(r.display_name.split(',')[0])}">
               <i class="fa-solid fa-location-dot"></i>
-              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.display_name}</span>
+              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(r.display_name)}</span>
             </div>
           `).join('');
           searchAddressResults.classList.remove('hidden');
@@ -1071,7 +1071,7 @@ secao */
       <div class="stop-item-card">
         <div class="stop-info">
           <div class="stop-badge" style="${stop.isOrigin ? 'background-color:#10b981; color:#fff;' : ''}">${idx === 0 ? 'P' : idx}</div>
-          <span class="stop-name">${stop.name}</span>
+          <span class="stop-name">${escapeHtml(stop.name)}</span>
         </div>
         ${!stop.isOrigin ? `
           <button type="button" class="btn-remove-stop" data-idx="${idx}" title="Remover Parada">
@@ -1091,7 +1091,7 @@ secao */
     });
   }
 
-  // Execução do Solver de Otimização (OSRM Matrix + OR-Tools 2-Opt)
+  // Execução do roteirizador (matriz OSRM + vizinho mais próximo + 2-Opt)
   const btnSolveRoute = document.getElementById('btn-solve-route');
   if (btnSolveRoute) {
     btnSolveRoute.addEventListener('click', async () => {
@@ -1106,21 +1106,21 @@ secao */
         // 1. Obter matriz N x N de durações e distâncias via OSRM Table API
         const matrixData = await fetchOSRMMatrix(currentStopsList);
         
-        // 2. Executar Solver (OR-Tools style: 2-Opt Local Search)
+        // 2. Executar a heurística (vizinho mais próximo + 2-Opt)
         const solution = solveOptimalRoute(matrixData.durations, currentStopsList.length);
 
         // 3. Obter geometria de rota contínua e distâncias reais
         const routeResult = await renderOptimizedRouteOnMap(currentStopsList, solution.bestRoute);
 
-        // 4. Reordenar a lista de paradas com a solução ótima calculada
+        // 4. Reordenar a lista de paradas com a solução calculada
         currentStopsList = solution.bestRoute.map(idx => currentStopsList[idx]);
         renderStopsList();
         updateActiveDeliveryUI();
 
-        // 5. Renderizar resultados no painel do modal
-        renderRouteSolutionResults(currentStopsList, solution.bestRoute, routeResult, matrixData);
+        // 5. Renderizar resultados no painel do modal (lista já reordenada)
+        renderRouteSolutionResults(currentStopsList, routeResult, solution.savingsPercent);
         closeModal(document.getElementById('modal-route-optimizer'));
-        showToast('🚀 Rota ideal calculada e traçada no mapa com sucesso!', 'success');
+        showToast('🚀 Rota otimizada (heurística 2-Opt) traçada no mapa!', 'success');
       } catch (err) {
         console.error('Erro na roteirização:', err);
         showToast(err.message || 'Erro ao otimizar rota com OSRM.', 'error');
@@ -1145,7 +1145,7 @@ secao */
     };
   }
 
-  // 2. Solver OR-Tools Style: Nearest Neighbor + 2-Opt Local Search (Open TSP)
+  // 2. Heurística própria: Vizinho Mais Próximo + 2-Opt (TSP aberto com origem fixa)
   function solveOptimalRoute(matrix, numPoints) {
     // 2a. Caminho inicial Heurística Vizinho Mais Próximo
     let unvisited = new Set();
@@ -1169,7 +1169,7 @@ secao */
       curr = nearest;
     }
 
-    // 2b. Refinamento 2-Opt Local Search (Motor exato do OR-Tools para TSP)
+    // 2b. Refinamento 2-Opt (busca local: encontra um ótimo local, sem garantia de ótimo global)
     const getPathCost = (path) => {
       let c = 0;
       for (let i = 0; i < path.length - 1; i++) {
@@ -1258,13 +1258,15 @@ secao */
         iconAnchor: [14, 14]
       });
 
+      const marker = L.marker([pt.lat, pt.lng], { icon: stopIcon }).addTo(mapInstance);
+
       const popupHtml = `
         <div style="font-size:0.82rem; text-align:center; padding:4px;">
           <b>Parada ${idx}</b><br>
-          <span style="font-size:0.75rem;">${pt.name}</span><br>
-          ${pt.price ? `<span style="font-weight:700; color:#10b981; font-size:0.85rem;">${pt.price}</span><br>` : ''}
+          <span style="font-size:0.75rem;">${escapeHtml(pt.name)}</span><br>
+          ${pt.price ? `<span style="font-weight:700; color:#10b981; font-size:0.85rem;">${escapeHtml(pt.price)}</span><br>` : ''}
           <button onclick="window.completeSpecificStop(${idx})" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; margin-top:8px; font-weight:700; cursor:pointer; width:100%;">
-            <i class="fa-solid fa-circle-check"></i> Concluir Entrega
+            <i class="fa-solid ${pt.orderId ? 'fa-qrcode' : 'fa-circle-check'}"></i> ${pt.orderId ? 'Confirmar com QR Code' : 'Concluir Parada'}
           </button>
         </div>
       `;
@@ -1279,7 +1281,7 @@ secao */
     stopMarkers = [];
   }
 
-  function renderRouteSolutionResults(points, optimalOrder, routeResult, matrixData) {
+  function renderRouteSolutionResults(orderedPoints, routeResult, savingsPercent) {
     const solutionPanel = document.getElementById('route-solution-panel');
     const metricDist = document.getElementById('metric-dist');
     const metricTime = document.getElementById('metric-time');
@@ -1296,20 +1298,16 @@ secao */
     }
 
     if (metricSaved) {
-      const solution = solveOptimalRoute(matrixData.durations, points.length);
-      metricSaved.innerText = `${solution.savingsPercent}%`;
+      metricSaved.innerText = `${savingsPercent}%`;
     }
 
     if (seqListElem) {
-      seqListElem.innerHTML = optimalOrder.map((ptIdx, orderIdx) => {
-        const pt = points[ptIdx];
-        return `
+      seqListElem.innerHTML = orderedPoints.map((pt, orderIdx) => `
           <div class="seq-item">
             <div class="seq-num">${orderIdx === 0 ? 'P' : orderIdx}</div>
-            <div class="seq-name">${pt.name}</div>
+            <div class="seq-name">${escapeHtml(pt.name)}</div>
           </div>
-        `;
-      }).join('');
+        `).join('');
     }
   }
 
@@ -1391,16 +1389,11 @@ secao */
       try {
         // Tenta buscar uma entrega real pendente no banco para simular
         let candidateCode = 'ENT-10421';
-        if (window.dbManager) {
-          const avail = await window.dbManager.getOrders('available');
-          if (avail && avail.length > 0 && avail[0].qr_code) {
-            candidateCode = avail[0].qr_code;
-          } else {
-            const inTransit = await window.dbManager.getOrders('in_transit');
-            if (inTransit && inTransit.length > 0 && inTransit[0].qr_code) {
-              candidateCode = inTransit[0].qr_code;
-            }
-          }
+        if (window.dbManager && AppState.activeUser) {
+          // Simula a leitura de um pedido já aceito por este entregador (RN02)
+          const mine = await window.dbManager.getOrders(null, null, AppState.activeUser.id);
+          const pending = (mine || []).find(o => ['accepted', 'in_transit'].includes(o.status) && o.qr_code);
+          if (pending) candidateCode = pending.qr_code;
         }
         processQrCodeRead(candidateCode);
       } catch (e) {
@@ -1475,7 +1468,7 @@ secao */
         }
 
         // Executar conclusão no banco (Supabase / SQLite)
-        const updatedOrder = await window.dbManager.completeOrder(order.id, driverId);
+        const updatedOrder = await window.dbManager.completeOrder(order.id, driverId, order.qr_code);
 
         // Registrar em audit_logs
         await window.dbManager.logAudit(driverId, 'delivery.completed_by_qrcode', {
@@ -1528,7 +1521,7 @@ secao */
 
         const successNotice = window.dbManager.isSupabaseMode
           ? `🎉 Entrega #${order.id} (${order.qr_code}) confirmada com sucesso!`
-          : `🎉 Entrega #${order.id} confirmada localmente! (Pendente de sincronização)`;
+          : `🎉 Entrega #${order.id} confirmada no banco local (modo de contingência, sem sincronização com a nuvem).`;
 
         showToast(successNotice, 'success');
       } catch (err) {
@@ -1597,14 +1590,19 @@ secao */
 
       // 5. Validar contexto/propriedade da entrega
       const activeUserId = String(AppState.activeUser.id);
-      if (order.driver_id && String(order.driver_id).trim() !== '' && String(order.driver_id) !== activeUserId) {
+      if (!order.driver_id || String(order.driver_id).trim() === '') {
+        showToast('Aceite este frete no portal de Oportunidades antes de confirmar a entrega.', 'error');
+        qrProcessing = false;
+        return;
+      }
+      if (String(order.driver_id) !== activeUserId) {
         showToast('Esta entrega já foi atribuída a outro entregador.', 'error');
         qrProcessing = false;
         return;
       }
 
-      // 6. Verificar status compatível
-      if (!['available', 'accepted', 'in_transit'].includes(order.status)) {
+      // 6. Verificar status compatível (somente pedidos aceitos / em rota)
+      if (!['accepted', 'in_transit'].includes(order.status)) {
         showToast(`Status da entrega incompatível com finalização (${order.status}).`, 'error');
         qrProcessing = false;
         return;
@@ -1651,7 +1649,7 @@ secao */
           </div>
           <div class="qr-confirm-info">
             <span class="qr-confirm-label">Estabelecimento / Loja</span>
-            <span class="qr-confirm-val">${order.store_name || 'Loja Parceira'}</span>
+            <span class="qr-confirm-val">${escapeHtml(order.store_name || 'Loja Parceira')}</span>
           </div>
         </div>
 
@@ -1661,7 +1659,7 @@ secao */
           </div>
           <div class="qr-confirm-info">
             <span class="qr-confirm-label">Cliente / Destinatário</span>
-            <span class="qr-confirm-val">${order.customer_name || 'Cliente'} ${order.customer_phone ? `<small style="color:#64748b;">(${order.customer_phone})</small>` : ''}</span>
+            <span class="qr-confirm-val">${escapeHtml(order.customer_name || 'Cliente')} ${order.customer_phone ? `<small style="color:#64748b;">(${escapeHtml(order.customer_phone)})</small>` : ''}</span>
           </div>
         </div>
 
@@ -1671,7 +1669,7 @@ secao */
           </div>
           <div class="qr-confirm-info">
             <span class="qr-confirm-label">Endereço de Entrega</span>
-            <span class="qr-confirm-val">${order.delivery_address || 'Endereço não informado'}</span>
+            <span class="qr-confirm-val">${escapeHtml(order.delivery_address || 'Endereço não informado')}</span>
           </div>
         </div>
 
@@ -1681,7 +1679,7 @@ secao */
           </div>
           <div class="qr-confirm-info">
             <span class="qr-confirm-label">Detalhes do Pacote</span>
-            <span class="qr-confirm-val">${order.package_details || 'Pacote Padrão'}</span>
+            <span class="qr-confirm-val">${escapeHtml(order.package_details || 'Pacote Padrão')}</span>
           </div>
         </div>
 
@@ -1692,7 +1690,7 @@ secao */
             </div>
             <div class="qr-confirm-info">
               <span class="qr-confirm-label">Valor do Frete</span>
-              <span class="qr-confirm-val" style="color:#16a34a;">${order.price || 'R$ 15,00'}</span>
+              <span class="qr-confirm-val" style="color:#16a34a;">${escapeHtml(order.price || 'R$ 15,00')}</span>
             </div>
           </div>
 
@@ -1716,18 +1714,18 @@ secao */
     const stop = currentStopsList[idx];
     if (!stop) return;
 
-    showToast(`Concluindo entrega da parada ${idx}...`, 'info');
+    // RN02: pedidos reais (com orderId) só podem ser concluídos pela leitura do QR Code
+    if (stop.orderId) {
+      showToast(`Leia o QR Code ${stop.qrCode || ''} do cliente para concluir esta entrega.`, 'info');
+      openModal('qr-scanner');
+      startCameraScanner();
+      return;
+    }
+
+    showToast(`Concluindo parada ${idx}...`, 'info');
 
     try {
-      if (stop.orderId && AppState.activeUser) {
-        await window.dbManager.completeOrder(stop.orderId, AppState.activeUser.id);
-        await window.dbManager.logAudit(AppState.activeUser.id, 'delivery.completed_by_route', {
-          order_id: stop.orderId,
-          stop_name: stop.name,
-          driver_id: AppState.activeUser.id,
-          price: stop.price
-        });
-      } else if (AppState.activeUser) {
+      if (AppState.activeUser) {
         const now = new Date().toLocaleDateString('pt-BR');
         await window.dbManager.addRide(
           AppState.activeUser.id,
@@ -2079,7 +2077,7 @@ secao */
   let activeWalletFilter = 'all';
 
   function escapeHtml(str) {
-    if (!str) return '';
+    if (str === null || str === undefined) return '';
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -2728,7 +2726,7 @@ secao */
             <i class="${getBrandIcon(card.brand)}"></i>
           </div>
           <div class="card-item-details">
-            <span class="card-masked-num">${card.number}</span>
+            <span class="card-masked-num">${escapeHtml(card.number)}</span>
             ${card.is_default === 1 ? '<span class="card-default-badge">Padrão</span>' : ''}
           </div>
         </div>
@@ -2912,8 +2910,8 @@ secao */
             <i class="${getPlaceIcon(place.type)}"></i>
           </div>
           <div class="place-info">
-            <span class="place-title">${place.title}</span>
-            <span class="place-address">${place.address}</span>
+            <span class="place-title">${escapeHtml(place.title)}</span>
+            <span class="place-address">${escapeHtml(place.address)}</span>
           </div>
         </div>
         <button class="btn-delete-place" data-id="${place.id}" title="Remover dos Favoritos">
@@ -3291,27 +3289,27 @@ secao */
             <div class="frete-store-info">
               <div class="frete-store-icon"><i class="fa-solid fa-store"></i></div>
               <div>
-                <div class="frete-store-title">${ord.store_name}</div>
-                <div class="frete-store-cat">Cód: ${ord.qr_code || 'ENT-' + ord.id}</div>
+                <div class="frete-store-title">${escapeHtml(ord.store_name)}</div>
+                <div class="frete-store-cat">Cód: ${escapeHtml(ord.qr_code || 'ENT-' + ord.id)}</div>
               </div>
             </div>
-            <div class="frete-price-tag">${ord.price}</div>
+            <div class="frete-price-tag">${escapeHtml(ord.price)}</div>
           </div>
 
           <div class="frete-route-details">
             <div class="frete-point pickup">
               <i class="fa-solid fa-circle-dot"></i>
-              <span><b>Retirada:</b> ${ord.pickup_address}</span>
+              <span><b>Retirada:</b> ${escapeHtml(ord.pickup_address)}</span>
             </div>
             <div class="frete-point delivery">
               <i class="fa-solid fa-location-dot"></i>
-              <span><b>Entrega:</b> ${ord.delivery_address} (${ord.customer_name})</span>
+              <span><b>Entrega:</b> ${escapeHtml(ord.delivery_address)} (${escapeHtml(ord.customer_name)})</span>
             </div>
           </div>
 
           ${ord.package_details ? `
             <div class="frete-package-info">
-              <i class="fa-solid fa-box"></i> <span>${ord.package_details}</span>
+              <i class="fa-solid fa-box"></i> <span>${escapeHtml(ord.package_details)}</span>
             </div>
           ` : ''}
 
@@ -3535,15 +3533,15 @@ secao */
         } else if (ord.status === 'delivered') {
           statusBadge = '<span class="order-status-badge delivered">Entregue ✓</span>';
         } else {
-          statusBadge = `<span class="order-status-badge">${ord.status}</span>`;
+          statusBadge = `<span class="order-status-badge">${escapeHtml(ord.status)}</span>`;
         }
 
         return `
           <div class="store-order-card">
             <div class="frete-card-header">
               <div>
-                <strong style="font-size:0.9rem;">Pedido #${ord.id} - ${ord.customer_name}</strong>
-                <div style="font-size:0.72rem; color:#64748b; margin-top:2px;">Criado em: ${ord.created_at || 'Hoje'}</div>
+                <strong style="font-size:0.9rem;">Pedido #${escapeHtml(ord.id)} - ${escapeHtml(ord.customer_name)}</strong>
+                <div style="font-size:0.72rem; color:#64748b; margin-top:2px;">Criado em: ${escapeHtml(ord.created_at || 'Hoje')}</div>
               </div>
               <div>${statusBadge}</div>
             </div>
@@ -3551,18 +3549,18 @@ secao */
             <div class="frete-route-details">
               <div class="frete-point delivery">
                 <i class="fa-solid fa-location-dot"></i>
-                <span><b>Entrega:</b> ${ord.delivery_address}</span>
+                <span><b>Entrega:</b> ${escapeHtml(ord.delivery_address)}</span>
               </div>
               <div class="frete-package-info" style="margin-top:4px;">
-                <i class="fa-solid fa-box"></i> <span>${ord.package_details || 'Pacote Padrão'}</span>
+                <i class="fa-solid fa-box"></i> <span>${escapeHtml(ord.package_details || 'Pacote Padrão')}</span>
               </div>
             </div>
 
             <div class="frete-card-footer">
               <span style="font-size:0.75rem; color:#64748b;">
-                QR Code: <b style="color:#0f172a; font-family:monospace;">${ord.qr_code || 'ENT-' + ord.id}</b>
+                QR Code: <b style="color:#0f172a; font-family:monospace;">${escapeHtml(ord.qr_code || 'ENT-' + ord.id)}</b>
               </span>
-              <strong style="color:#10b981; font-size:0.95rem;">${ord.price}</strong>
+              <strong style="color:#10b981; font-size:0.95rem;">${escapeHtml(ord.price)}</strong>
             </div>
           </div>
         `;
@@ -3671,10 +3669,10 @@ secao */
           <i class="fa-solid fa-box-archive"></i>
         </div>
         <div class="hist-details">
-          <div class="hist-address">${ride.address}</div>
-          <div class="hist-date">${ride.date}</div>
+          <div class="hist-address">${escapeHtml(ride.address)}</div>
+          <div class="hist-date">${escapeHtml(ride.date)}</div>
         </div>
-        <div class="hist-price" style="color:#10b981; font-weight:700;">${ride.price}</div>
+        <div class="hist-price" style="color:#10b981; font-weight:700;">${escapeHtml(ride.price)}</div>
       </div>
     `).join('');
   }
@@ -3726,7 +3724,7 @@ secao */
     
     dom.chatMessagesContainer.innerHTML = `
       <div class="chat-bubble received">
-        Olá, ${AppState.activeUser ? AppState.activeUser.name : 'visitante'}! Sou o assistente virtual da MotoHelp. Como posso te ajudar com o tema <strong>${subject}</strong> hoje?
+        Olá, ${escapeHtml(AppState.activeUser ? AppState.activeUser.name : 'visitante')}! Sou o assistente virtual da MotoHelp. Como posso te ajudar com o tema <strong>${escapeHtml(subject)}</strong> hoje?
         <span class="bubble-time">Agora mesmo</span>
       </div>
     `;
@@ -3745,7 +3743,7 @@ secao */
 
     const userMsgHTML = `
       <div class="chat-bubble sent">
-        ${text}
+        ${escapeHtml(text)}
         <span class="bubble-time">${getCurrentTimeFormatted()}</span>
       </div>
     `;
@@ -3798,7 +3796,7 @@ secao */
     }
 
     if (textLower.includes('ola') || textLower.includes('oi') || textLower.includes('bom dia')) {
-      return `Olá, ${AppState.activeUser.name}! 😊 Como posso te ajudar na central de ajuda hoje?`;
+      return `Olá, ${escapeHtml(AppState.activeUser.name)}! 😊 Como posso te ajudar na central de ajuda hoje?`;
     }
 
     return 'Entendido. Abri um protocolo de atendimento interno. Nossa equipe humana entrará em contato em breve!';
@@ -4008,18 +4006,14 @@ secao */
         btnSubmitForgot.disabled = true;
 
         try {
-          const userFound = await window.dbManager.checkUserByEmail(email);
-          if (userFound) {
-            forgotFeedbackMsg.className = 'auth-error-banner success';
-            forgotFeedbackMsg.innerHTML = `<i class="fa-solid fa-circle-check"></i> Conta encontrada! Enviamos um link de redefinição para <b>${email}</b>.<br><small style="margin-top:4px; display:block; color:#15803d;">(Dica de teste: sua senha atual é "${userFound.password || '123456'}")</small>`;
-            forgotFeedbackMsg.classList.remove('hidden');
-            showToast('Instruções de recuperação enviadas!', 'success');
-          } else {
-            forgotFeedbackMsg.className = 'auth-error-banner';
-            forgotFeedbackMsg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> Nenhum cadastro encontrado com o e-mail informado.`;
-            forgotFeedbackMsg.classList.remove('hidden');
-            showToast('E-mail não encontrado no sistema.', 'error');
-          }
+          // Não revela a senha nem se o e-mail existe (evita enumeração de contas)
+          const result = await window.dbManager.requestPasswordReset(email);
+          forgotFeedbackMsg.className = result.sent ? 'auth-error-banner success' : 'auth-error-banner';
+          forgotFeedbackMsg.innerHTML = result.sent
+            ? `<i class="fa-solid fa-circle-check"></i> Se houver uma conta para <b>${escapeHtml(email)}</b>, enviamos um link de redefinição de senha.`
+            : `<i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(result.message)}`;
+          forgotFeedbackMsg.classList.remove('hidden');
+          showToast(result.sent ? 'Instruções de recuperação enviadas!' : 'Recuperação indisponível.', result.sent ? 'success' : 'error');
         } catch (e) {
           showToast('Erro ao processar recuperação.', 'error');
         } finally {
@@ -4436,16 +4430,16 @@ secao */
 
     if (roleBadge) {
       if (user.user_type === 'lojista') {
-        roleBadge.innerHTML = `<i class="fa-solid fa-store"></i> <span>Lojista (${user.store_name || user.category || 'Loja'})</span>`;
+        roleBadge.innerHTML = `<i class="fa-solid fa-store"></i> <span>Lojista (${escapeHtml(user.store_name || user.category || 'Loja')})</span>`;
         if (menuItemMoto) menuItemMoto.classList.add('hidden');
       } else {
-        roleBadge.innerHTML = `<i class="fa-solid fa-motorcycle"></i> <span>Entregador (Moto - ${user.vehicle_plate || 'Moto'})</span>`;
+        roleBadge.innerHTML = `<i class="fa-solid fa-motorcycle"></i> <span>Entregador (Moto - ${escapeHtml(user.vehicle_plate || 'Moto')})</span>`;
         if (menuItemMoto) menuItemMoto.classList.remove('hidden');
       }
     }
 
     // foto circular premium no cabecalho
-    dom.btnProfileTrigger.innerHTML = `<img src="${user.avatar}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+    dom.btnProfileTrigger.innerHTML = `<img src="${escapeHtml(user.avatar)}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
 
     // prefill modal editar perfil
     dom.inputProfileName.value = user.name;
@@ -4502,6 +4496,11 @@ secao */
 
     localStorage.removeItem('activeUserId');
     AppState.activeUser = null;
+
+    // encerra também a sessão do Supabase Auth (antes o token continuava válido)
+    if (window.dbManager && window.dbManager.isSupabaseMode && window.dbManager.supabase) {
+      window.dbManager.supabase.auth.signOut().catch(e => console.warn('Aviso ao encerrar sessão Supabase:', e));
+    }
     
     // animacao de saida
     dom.appContainer.classList.remove('logged-in');

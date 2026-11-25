@@ -1,137 +1,137 @@
 # MotoHelp
 
-O MotoHelp é uma aplicação híbrida voltada para a roteirização e apoio logístico de entregadores. Desenvolvido como Trabalho de Conclusão de Curso (TCC), o projeto visa resolver problemas práticos de mobilidade e conectividade enfrentados por profissionais de entrega no cotidiano urbano, oferecendo planejamento de trajetos, um canal de oportunidades de fretes e um sistema de auxílio emergencial local.
+O MotoHelp é um aplicativo híbrido para Android de apoio a entregadores de moto e lojistas, desenvolvido como Trabalho de Conclusão de Curso (Tecnologia em Desenvolvimento de Sistemas). O repositório mantém o nome original, AppEntrega-TCC.
 
-## Funcionalidades Principais
+## Funcionalidades
 
-* **Planejamento e Roteirização:** Integração com mapas interativos para cálculo e visualização de trajetos eficientes.
-* **Portal de Oportunidades:** Espaço integrado para consulta de fretes e ofertas de serviços de entrega na região de atuação do profissional.
-* **Assistência Emergencial (SOS):** Canal direto para localização e contato com serviços mecânicos e borracheiros próximos em caso de imprevistos na rota.
-* **Operação Offline:** Acesso contínuo aos dados de rotas e contatos úteis mesmo em áreas sem cobertura de internet.
+* **Roteirização de múltiplas entregas:** matriz de tempos do OSRM, heurística do vizinho mais próximo e refinamento 2-Opt (ótimo local, sem garantia de ótimo global), com a rota desenhada no mapa a partir do GPS.
+* **Portal de fretes:** o lojista publica um frete com código de entrega `ENT-XXXXXXXXXX`; o entregador consulta e aceita. Só um entregador consegue aceitar cada frete.
+* **Confirmação por QR Code:** leitura pela câmera (jsQR) ou digitação. A entrega só é concluída com o código correto, pelo entregador do pedido, e a regra é validada no servidor (`complete_order`).
+* **SOS mecânico:** postos, borracharias e oficinas reais do OpenStreetMap (Overpass) num raio de 5 km.
+* **Manutenção e finanças da moto:** controle local no aparelho (`localStorage`).
+* **Contingência local:** se o Supabase não estiver disponível ao abrir o app, ele funciona com um banco local de demonstração. **Não há sincronização** entre o banco local e a nuvem.
 
-## Arquitetura de Dados
+## Arquitetura de dados
 
-A arquitetura do sistema foi projetada para garantir alta disponibilidade e tolerância a falhas de conexão, utilizando uma abordagem híbrida de persistência:
+O app não tem servidor próprio. O back-end é o Supabase (Auth, API REST e PostgreSQL), e a camada `www/db.js` (`UnifiedDatabaseManager`) concentra todo o acesso a dados.
 
-1. **Persistência Centralizada (Nuvem):** Utilização do Supabase (PostgreSQL) para armazenamento global de perfis de entregadores, histórico de rotas finalizadas, pontos de referência e auditoria do sistema.
-2. **Persistência Local (Dispositivo):** Utilização de banco de dados SQLite embarcado por meio do contêiner Capacitor. Atua como cache local e banco de contingência para viabilizar o uso offline.
+1. **Nuvem (Supabase/PostgreSQL):** perfis, pedidos, histórico, cartões (somente máscara), locais salvos e auditoria. A segurança é declarada no banco (RLS, GRANT/REVOKE e triggers), valendo mesmo para chamadas diretas à API.
+2. **Contingência local:** WebSQL quando disponível, senão `localStorage`. O modo é escolhido **uma única vez**, ao iniciar: se o SDK do Supabase carregou, as chaves existem e uma consulta de teste responde, o app usa a nuvem; senão, usa o banco local. Trata-se de um modelo "online com contingência local", não de offline-first.
 
-O controle e a alternância entre os modos online e offline são realizados de forma transparente pela camada de abstração unificada localizada em `www/db.js` (`UnifiedDatabaseManager`), assegurando que a interface do usuário não sofra interrupções durante oscilações de rede.
-
-### Fluxo de Integração de Dados
+As bibliotecas Leaflet e supabase-js estão copiadas em `www/vendor/`, então o app abre mesmo sem acesso a CDN. Mapas (tiles), rotas (OSRM), SOS (Overpass) e geocodificação (Nominatim) continuam exigindo internet.
 
 ```mermaid
 graph TD
-    Entregador["Entregador (App Mobile)"]
+    Entregador["Entregador / Lojista (App Android)"]
 
     subgraph Dispositivo_Movel ["Dispositivo Móvel"]
-        UI["Interface Gráfica (HTML5 / CSS / JS)"]
-        Leaflet["Leaflet Map API (Mapas)"]
-        DB_Manager["Unified Database Manager (db.js)"]
-        SQLite["SQLite Local Fallback (WebSQL/Cache)"]
+        UI["Interface (HTML5 / CSS / JS)"]
+        Leaflet["Leaflet (www/vendor)"]
+        DB_Manager["UnifiedDatabaseManager (db.js)"]
+        Local["Banco local de contingência (WebSQL / localStorage)"]
     end
 
-    OSM_API["API OpenStreetMap"]
+    APIs["OSRM · Overpass · Nominatim · CartoDB"]
 
-    subgraph Nuvem_Supabase ["Supabase Cloud Backend"]
-        API_Gateway["Supabase REST API Gateway"]
-        Auth_Service["Supabase Auth (Autenticação)"]
-        Postgres["PostgreSQL Database"]
-        Audit_Logs["Tabela audit_logs"]
+    subgraph Nuvem_Supabase ["Supabase"]
+        Auth["Supabase Auth"]
+        REST["API REST (PostgREST)"]
+        Postgres["PostgreSQL: RLS, triggers, complete_order()"]
     end
 
     Entregador --> UI
     UI --> Leaflet
-    UI --> OSM_API
+    UI --> APIs
     UI --> DB_Manager
-    
-    DB_Manager -->|Online| API_Gateway
-    DB_Manager -.->|Offline| SQLite
-    
-    API_Gateway --> Postgres
-    Auth_Service --> Postgres
-    Postgres --> Audit_Logs
+    DB_Manager -->|modo nuvem| REST
+    DB_Manager -->|modo nuvem| Auth
+    DB_Manager -.->|modo contingência| Local
+    REST --> Postgres
+    Auth -->|trigger handle_new_user| Postgres
 ```
 
-## Engenharia de Banco de Dados e Concorrência
+## Regras de negócio no banco
 
-Para assegurar a integridade dos dados e o desempenho do sistema sob concorrência, foram aplicadas técnicas específicas no nível de banco de dados:
+* **Aceite (RN03):** o `UPDATE` de aceite só afeta pedidos `available` sem entregador (filtro no app + política RLS + trigger `enforce_order_rules`). Um segundo aceite não altera o pedido.
+* **Conclusão (RN02):** a função `complete_order(p_order_id, p_qr_code)` bloqueia a linha (`SELECT ... FOR UPDATE`), confere entregador, status e QR Code, e só então marca `delivered`. Uma atualização direta para `delivered` é recusada pelo trigger, inclusive para o lojista.
+* **Dados do pedido:** preço, endereços, cliente e pacote só podem ser alterados pelo lojista enquanto o pedido está disponível. Lojista, código de entrega e entregador não podem ser trocados.
+* **Auditoria:** triggers `trg_audit_*` em `orders`, `users`, `cards` e `delivery_drivers` gravam `old_values`/`new_values` em JSONB na tabela `audit_logs`, que não aceita `UPDATE` nem `DELETE` de usuários. O app só pode inserir eventos com o próprio `user_id`.
 
-### Controle de Concorrência
-Nas operações de atualização do status de entrega ou atribuição de lotes de rotas, o sistema adota o bloqueio pessimista (*pessimistic locking*) via instrução `SELECT FOR UPDATE` no PostgreSQL. Isso evita conflitos em que múltiplos usuários tentem manipular o mesmo registro simultaneamente.
+## Segurança
 
-### Níveis de Isolamento
-As atualizações de dados sensíveis e históricos de rotas utilizam o nível de isolamento transacional `REPEATABLE READ`, mitigando problemas decorrentes de leituras fantasmas e garantindo a consistência das transações.
+* **RLS** em todas as tabelas, com políticas baseadas em `auth.uid()`. Cada usuário vê o próprio perfil e apenas a contraparte dos pedidos em que participa; cartões, locais e histórico são estritamente do dono.
+* **Sem elevação de privilégio:** `WITH CHECK` impede que um usuário vire `admin`; o trigger de cadastro também ignora `user_type = admin`.
+* **Menor privilégio:** o papel `anon` não acessa tabelas sensíveis; `authenticated` opera sob RLS.
+* **Senhas:** na nuvem, ficam no Supabase Auth (bcrypt), fora de `public.users`. No banco local de contingência, são gravadas com PBKDF2-HMAC-SHA256 (salt aleatório, 100.000 iterações). Hashes legados (SHA-256 sem salt ou texto puro) são regravados no próximo login.
+* **Saída escapada:** dados vindos do banco ou de APIs são escapados (`escapeHtml`) antes de entrar em `innerHTML`.
+* **Código de entrega:** gerado com `crypto.getRandomValues` (10 dígitos) e único no banco.
 
-### Telemetria e Auditoria Semiestruturada
-A tabela de auditoria (`audit_logs`) emprega o tipo de dado `JSONB` no PostgreSQL combinado com campos dedicados para rastreabilidade estrita (`table_name`, `record_id`, `old_values`, `new_values`, `payload`). As operações críticas nas tabelas protegidas (`orders`, `users`, `cards`, `delivery_drivers`) geram registros automáticos por meio de **triggers PostgreSQL** (`trg_audit_*`), garantindo que alterações de status, finalizações de entrega por QR Code e manipulações de registros sejam auditadas sem depender exclusivamente da camada cliente. A tabela é protegida por políticas de imutabilidade (proibição irrestrita de `UPDATE` e `DELETE`).
+## Estrutura do banco
 
-### Segurança, Isolamento de Dados e RLS (§7.5)
-O sistema implementa uma arquitetura robusta de segurança, integridade e isolamento de dados baseada em:
-* **Row Level Security (RLS) Ativo**: Habilitado em todas as tabelas sensíveis no PostgreSQL (`users`, `cards`, `places`, `rides`, `orders`, `delivery_drivers`, `audit_logs`). O isolamento garante que motoristas e lojistas só tenham acesso aos registros que lhes pertencem ou a pedidos disponíveis para entrega, com políticas declarativas de `SELECT`, `INSERT`, `UPDATE` e `DELETE` orientadas pelo identificador criptográfico confiável `auth.uid()`.
-* **Proteção contra Elevação de Privilégios**: As políticas de `WITH CHECK` impedem que usuários comuns alterem seu próprio papel para `admin` ou manipulem o `user_id` de registros de terceiros.
-* **Princípio do Menor Privilégio (Grants)**: O papel `anon` tem todos os acessos sensíveis revogados, enquanto o papel `authenticated` opera estritamente sob mediação do RLS.
-* **Criptografia de Credenciais**:
-  * **Ambiente em Nuvem (Supabase Auth)**: As credenciais não são persistidas na tabela pública `public.users`. O fluxo de login e registro é gerenciado pelo serviço oficial do Supabase Auth, que processa e armazena os segredos no schema fechado `auth.users` utilizando algoritmo adaptativo de derivação de chaves **Bcrypt** com salt criptográfico aleatório por padrão.
-  * **Ambiente Offline / Contingência Local (SQLite & Android Nativo)**:
-    * No gerenciador local (`www/db.js`), toda senha é cifrada com algoritmo de mão única **SHA-256** (utilizando a Web Crypto API nativa do navegador/WebView `crypto.subtle.digest` com fallback autônomo UTF-8) antes de qualquer operação de escrita ou consulta no banco.
-    * No aplicativo Android nativo ([`DatabaseHelper.java`](file:///c:/Users/Intersolid/Desktop/aaa/AppEntrega-TCC/android/app/src/main/java/com/motohelp/app/DatabaseHelper.java)), o método `hashPassword` aplica SHA-256 via `java.security.MessageDigest` com codificação UTF-8 estrita, sem fallbacks para texto puro.
-    * O sistema inclui rotina automática de migração transparente para hashes SHA-256 de bases legadas e higienização de objetos em memória (`delete user.password`), impedindo a exposição de segredos na interface do usuário.
+Oito tabelas em `migrations/001_initial_schema.sql`: `users`, `delivery_drivers`, `merchants`, `orders`, `rides`, `cards`, `places` e `audit_logs`.
 
-## Estrutura do Banco de Dados
+| Arquivo | Conteúdo |
+| --- | --- |
+| `migrations/001_initial_schema.sql` | Tabelas, chaves e índices |
+| `migrations/002_enable_rls_and_policies.sql` | RLS e políticas |
+| `migrations/003_audit_triggers.sql` | Auditoria automática |
+| `migrations/004_permissions_and_grants.sql` | GRANT/REVOKE |
+| `migrations/005_business_rules_hardening.sql` | Perfil por trigger, regras de pedido, `complete_order`, restrições de `users` e `audit_logs` |
+| `schema.sql` | Concatenação das migrations 001 a 005 (não editar à mão) |
+| `test_rls_security.sql` | 33 testes pgTAP de RLS, regras de pedido e auditoria |
 
-A modelagem lógica do banco de dados contempla as seguintes tabelas principais:
-* `users`: Cadastro e autenticação dos entregadores.
-* `rides`: Registro de trajetos executados e histórico de rotas de entrega.
-* `places`: Armazenamento de endereços frequentes e pontos de coleta/apoio logístico.
-* `cards`: Cadastro auxiliar associado a métodos de pagamento ou créditos no sistema.
-* `audit_logs`: Registro de eventos de segurança e logs operacionais em formato semiestruturado.
+## Tecnologias
 
-O script DDL completo, com a definição de chaves estrangeiras, restrições e índices de desempenho (como `idx_rides_user_id`), está localizado no arquivo `schema.sql`.
+* **Capacitor 8** (Android/WebView), **JavaScript ES6** sem framework, HTML5 e CSS3.
+* **Leaflet 1.9.4** e tiles CartoDB/OpenStreetMap; **OSRM** (Route e Table); **Overpass** e **Nominatim**.
+* **Supabase** (supabase-js v2): Auth, API REST e PostgreSQL.
+* **jsQR 1.4.0** para leitura de QR Code.
+* **pgTAP** para testes do banco; **Node.js** apenas para scripts auxiliares (`server.js` serve os arquivos em `localhost:3000`).
 
-## Tecnologias Utilizadas
-
-### Front-end e Mobile
-* **Capacitor v8:** Encapsulamento nativo para plataforma Android.
-* **Vanilla JavaScript (ES6):** Desenvolvimento de interface leve e responsiva sem a necessidade de frameworks externos.
-* **Leaflet e OpenStreetMap:** Renderização de mapas e processamento de coordenadas geográficas.
-* **SQLite (WebSQL / LocalStorage Fallback):** Armazenamento local estruturado.
-
-### Back-end e Nuvem
-* **Supabase Cloud:** Provedor do banco de dados relacional PostgreSQL, infraestrutura de autenticação e geração automática de endpoints REST.
-* **Node.js:** Ambiente para scripts auxiliares.
-
-## Instruções para Execução Local
+## Como executar
 
 ### Pré-requisitos
-* Node.js instalado na máquina.
-* Android Studio (necessário caso queira gerar e compilar o pacote nativo `.apk`).
 
-### Passos para Instalação
+* Node.js.
+* Android Studio, para gerar o `.apk`.
+* Um projeto no Supabase (opcional: sem ele o app roda no modo de contingência local).
 
-1. Clone o repositório para sua máquina local:
+### Passos
+
+1. Clone o repositório e instale as dependências:
    ```bash
-   git clone https://github.com/seu-usuario/app-entrega.git
-   cd app-entrega
-   ```
-
-2. Instale as dependências do projeto:
-   ```bash
+   git clone https://github.com/MatheusHMBoaventura/AppEntrega-TCC.git
+   cd AppEntrega-TCC
    npm install
    ```
 
-3. Configure as variáveis de acesso ao Supabase no arquivo `www/supabase-config.js`:
-   ```javascript
-   window.SUPABASE_URL = 'SUA_SUPABASE_URL';
-   window.SUPABASE_ANON_KEY = 'SUA_SUPABASE_ANON_KEY';
-   ```
+2. No SQL Editor do Supabase, execute as migrations **em ordem**, de `001` a `005`.
 
-4. Sincronize e compile a aplicação:
+3. Copie `www/supabase-config.example.js` para `www/supabase-config.js` e preencha a URL e a chave `anon` do projeto. Esse arquivo é ignorado pelo Git.
+
+4. Para testar no navegador: `node server.js` e abra `http://localhost:3000`.
+
+5. Para gerar o app Android:
    ```bash
    npx cap sync
    npx cap open android
    ```
 
+### Testes do banco
+
+Com as migrations aplicadas e a extensão pgTAP disponível, execute `test_rls_security.sql` (psql ou SQL Editor). O resultado esperado é `ok` nos 33 testes.
+
+### Contas de demonstração (somente modo local)
+
+No modo de contingência local, o app cria contas de demonstração com senha `123456`: `joao@email.com` (entregador) e `matheus@email.com` (lojista). Elas não existem no Supabase.
+
+## Limitações conhecidas
+
+* Sem sincronização entre o banco local e a nuvem.
+* O login com Google só funciona no modo nuvem; no modo local, ele é simulado.
+* O OSRM e o Overpass usados são servidores públicos, sem garantia de disponibilidade.
+* Manutenção e finanças da moto ficam apenas no aparelho.
+
 ## Licença
 
-Este projeto é de uso acadêmico, desenvolvido sob licença ISC.
+Projeto acadêmico, licença ISC.

@@ -53,10 +53,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public static String hashPassword(String password) {
         if (password == null) return "";
         String trimmed = password.trim();
-        // Se já for um hash hexadecimal de 64 caracteres, mantém
-        if (trimmed.matches("^[a-fA-F0-9]{64}$")) {
-            return trimmed.toLowerCase();
-        }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(trimmed.getBytes(java.nio.charset.StandardCharsets.UTF_8));
